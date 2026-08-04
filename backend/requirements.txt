@@ -1,0 +1,29 @@
+# Web framework — handles HTTP requests/responses
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# File uploads in FastAPI
+python-multipart==0.0.20
+
+# Settings from .env files
+pydantic-settings==2.7.1
+
+# PDF text extraction (digital PDFs)
+pymupdf==1.25.3
+
+# OCR for images and scanned PDFs
+pytesseract==0.3.13
+Pillow==11.1.0
+
+# Convert PDF pages to images (for scanned PDF OCR)
+pdf2image==1.17.0
+
+# Groq LLM (field extraction)
+groq==0.18.0
+
+# Supabase (persistence)
+supabase==2.13.0
+
+# Tests
+pytest==8.3.4
+pytest-asyncio==0.25.2
