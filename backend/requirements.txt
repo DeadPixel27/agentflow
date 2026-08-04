@@ -22,7 +22,7 @@ pdf2image==1.17.0
 groq==0.18.0
 
 # Supabase (persistence)
-supabase==2.13.0
+supabase>=2.16.0
 
 # Tests
 pytest==8.3.4
