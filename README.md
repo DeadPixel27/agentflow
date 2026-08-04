@@ -91,6 +91,43 @@ SPEC.md                   # Full product spec + progress
 | `SUPABASE_URL` | No | Postgres persistence |
 | `SUPABASE_SECRET_KEY` | No | Supabase service role key |
 
+## Contributing / Git workflow
+
+We use a simple **Git Flow**-style setup:
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Stable, deployable code (releases) |
+| `develop` | Integration branch — day-to-day work merges here |
+| `feature/*` | One branch per task (e.g. `feature/supabase-setup`) |
+
+### Day-to-day
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b feature/my-task
+
+# ... make changes, commit ...
+
+git push -u origin feature/my-task
+# Open a PR: feature/my-task → develop
+```
+
+### Release to production
+
+When `develop` is tested and ready:
+
+```bash
+# Open a PR: develop → main
+# Or locally:
+git checkout main
+git merge develop
+git push origin main
+```
+
+**Rule of thumb:** never commit directly to `main` — always go through `develop` or a feature branch.
+
 ## License
 
 MIT (or your choice — update before publishing)
