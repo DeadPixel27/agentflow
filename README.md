@@ -56,6 +56,10 @@ pytest tests/ -v
 
 See [backend/MANUAL_API_TEST.md](backend/MANUAL_API_TEST.md).
 
+### Supabase (persistence)
+
+See [backend/SUPABASE_SETUP.md](backend/SUPABASE_SETUP.md).
+
 ## Main API flow
 
 ```
