@@ -27,7 +27,7 @@ Upload PDFs or images, describe the task in plain English, and get structured JS
 - **Backend:** Python 3.9+, FastAPI, Groq (Llama 3.3)
 - **PDF/OCR:** PyMuPDF, Tesseract
 - **Persistence:** Supabase (optional) or in-memory
-- **Frontend:** Next.js (planned)
+- **Frontend:** Next.js 14 + TypeScript + Tailwind + shadcn/ui
 
 ## Quick start
 
@@ -60,6 +60,17 @@ See [backend/MANUAL_API_TEST.md](backend/MANUAL_API_TEST.md).
 
 See [backend/SUPABASE_SETUP.md](backend/SUPABASE_SETUP.md).
 
+### Frontend
+
+```bash
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 (backend must be running on :8000).
+
 ## Main API flow
 
 ```
@@ -75,16 +86,15 @@ GET  /api/workflows/{id}/runs     # run history
 
 ```
 backend/
-├── app/
-│   ├── api/routes/       # HTTP endpoints
-│   ├── agents/           # Agent registry + handlers
-│   ├── models/           # API + domain models
-│   ├── persistence/      # Supabase / in-memory store
-│   └── services/         # Planner, runner, upload, LLM
+├── app/                  # FastAPI application
 ├── supabase/             # DB schema + migrations
 ├── tests/
-└── samples/              # test_invoice.pdf
-SPEC.md                   # Full product spec + progress
+└── samples/
+frontend/
+├── src/app/              # Next.js pages (/, /results/[runId])
+├── src/components/       # UI components
+└── src/lib/                # API client
+SPEC.md
 ```
 
 ## Environment variables
