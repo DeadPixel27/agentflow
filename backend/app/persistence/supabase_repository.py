@@ -64,6 +64,30 @@ class SupabaseRepository:
             created_at=row.get("created_at"),
         )
 
+    def get_user_by_email(self, email: str) -> Optional[UserRecord]:
+        normalized = email.strip().lower()
+        if not normalized:
+            return None
+        resp = (
+            _get_client()
+            .table("users")
+            .select("*")
+            .eq("email", normalized)
+            .order("created_at", desc=True)
+            .limit(1)
+            .maybe_single()
+            .execute()
+        )
+        if not resp.data:
+            return None
+        row = resp.data
+        return UserRecord(
+            user_id=row["id"],
+            name=row["name"],
+            email=row.get("email") or "",
+            created_at=row.get("created_at"),
+        )
+
     def list_users(self) -> list[UserRecord]:
         resp = _get_client().table("users").select("*").order("created_at", desc=True).execute()
         return [

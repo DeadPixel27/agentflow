@@ -132,12 +132,22 @@ export async function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
 }
 
-export async function createUser(name: string, email = ""): Promise<User> {
-  return request<User>("/api/users", {
+export async function signIn(name: string, email: string): Promise<{
+  user: User;
+  is_new_user: boolean;
+  auth_provider: string;
+}> {
+  return request("/api/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email }),
   });
+}
+
+/** @deprecated Use signIn — kept for compatibility */
+export async function createUser(name: string, email = ""): Promise<User> {
+  const result = await signIn(name, email);
+  return result.user;
 }
 
 export async function getUser(userId: string): Promise<User> {

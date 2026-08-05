@@ -20,6 +20,11 @@ export function useRunPolling(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+
+  onCompleteRef.current = onComplete;
+  onErrorRef.current = onError;
 
   const fetchRun = useCallback(async () => {
     try {
@@ -29,23 +34,25 @@ export function useRunPolling(
 
       if (data.status !== "running" && !completedRef.current) {
         completedRef.current = true;
-        onComplete?.(data);
+        onCompleteRef.current?.(data);
       }
       return data;
     } catch (e) {
       const message =
         e instanceof ApiError ? e.message : "Failed to load run.";
       setError(message);
-      onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     }
-  }, [runId, onComplete, onError]);
+  }, [runId]);
 
   useEffect(() => {
     if (!enabled || !runId) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
+    completedRef.current = false;
 
     async function poll() {
       setLoading(true);
@@ -58,7 +65,6 @@ export function useRunPolling(
       }
     }
 
-    completedRef.current = false;
     void poll();
 
     return () => {

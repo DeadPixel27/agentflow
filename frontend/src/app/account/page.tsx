@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { clearStoredUser, registerUser } from "@/lib/user-session";
+import { clearStoredUser, signInUser } from "@/lib/user-session";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -33,21 +33,29 @@ export default function AccountPage() {
     toastSuccess("Signed out.");
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       toastError("Name is required.");
       return;
     }
+    if (!email.trim()) {
+      toastError("Email is required to sign in.");
+      return;
+    }
     setLoading(true);
     try {
-      const created = await registerUser(name, email);
-      setUser(created);
-      toastSuccess(`Welcome, ${created.name}!`);
+      const { user: signedIn, isNewUser } = await signInUser(name, email);
+      setUser(signedIn);
+      toastSuccess(
+        isNewUser
+          ? `Welcome, ${signedIn.name}!`
+          : `Welcome back, ${signedIn.name}!`,
+      );
       router.push("/workflows");
     } catch (err) {
       toastError(
-        err instanceof ApiError ? err.message : "Failed to create user.",
+        err instanceof ApiError ? err.message : "Failed to sign in.",
       );
     } finally {
       setLoading(false);
@@ -72,8 +80,8 @@ export default function AccountPage() {
         <div>
           <h1 className="text-2xl font-bold">Account</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Workflows are scoped to your user. Stored in this browser only (no
-            password yet).
+            Workflows live in Supabase and are tied to your email. This browser
+            only remembers your session (user id) in localStorage.
           </p>
         </div>
 
@@ -81,7 +89,7 @@ export default function AccountPage() {
           <Card>
             <CardHeader>
               <CardTitle>Signed in</CardTitle>
-              <CardDescription>Current user on this device</CardDescription>
+              <CardDescription>Current session on this device</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>
@@ -103,13 +111,13 @@ export default function AccountPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{user ? "Create another account" : "Create account"}</CardTitle>
+            <CardTitle>{user ? "Switch account" : "Sign in"}</CardTitle>
             <CardDescription>
-              Required to save and list workflows.
+              Same email always restores your workflows from the database.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSignIn} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
@@ -121,7 +129,7 @@ export default function AccountPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email (optional)</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -129,13 +137,14 @@ export default function AccountPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
+                  required
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Create account
+                {user ? "Sign in as different user" : "Sign in / Create account"}
               </Button>
             </form>
           </CardContent>

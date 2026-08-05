@@ -16,6 +16,7 @@ from fastapi import Depends
 
 from app.persistence import get_document_store, get_repository
 from app.persistence.protocols import DataRepository, DocumentStorageRepository
+from app.services.auth.service import AuthService
 from app.services.documents.upload_service import UploadService
 from app.services.users.user_service import UserService
 from app.services.workflows.workflow_service import WorkflowService
@@ -48,19 +49,26 @@ def get_upload_service(
     return UploadService(store)
 
 
+def get_auth_service(repo: DataRepository = Depends(get_repo)) -> AuthService:
+    return AuthService(repo)
+
+
 RepoDep = Annotated[DataRepository, Depends(get_repo)]
 DocStoreDep = Annotated[DocumentStorageRepository, Depends(get_doc_store)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 WorkflowServiceDep = Annotated[WorkflowService, Depends(get_workflow_service)]
 UploadServiceDep = Annotated[UploadService, Depends(get_upload_service)]
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 __all__ = [
+    "AuthServiceDep",
     "DocStoreDep",
     "RepoDep",
     "UploadServiceDep",
     "UserServiceDep",
     "WorkflowServiceDep",
+    "get_auth_service",
     "get_doc_store",
     "get_repo",
     "get_upload_service",

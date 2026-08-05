@@ -1,4 +1,4 @@
-import { createUser, getUser, type User } from "@/lib/api";
+import { getUser, signIn, type User } from "@/lib/api";
 
 const USER_ID_KEY = "agentflow_user_id";
 const USER_NAME_KEY = "agentflow_user_name";
@@ -38,25 +38,36 @@ export function getStoredUserId(): string | null {
   return loadStoredUser()?.user_id ?? null;
 }
 
-export async function registerUser(name: string, email = ""): Promise<StoredUser> {
-  const user = await createUser(name.trim(), email.trim());
+/** Sign in by email (restores existing Supabase user) or create a new account. */
+export async function signInUser(
+  name: string,
+  email: string,
+): Promise<{ user: StoredUser; isNewUser: boolean }> {
+  const result = await signIn(name.trim(), email.trim());
   const stored: StoredUser = {
-    user_id: user.user_id,
-    name: user.name,
-    email: user.email,
+    user_id: result.user.user_id,
+    name: result.user.name,
+    email: result.user.email,
   };
   saveStoredUser(stored);
-  return stored;
+  return { user: stored, isNewUser: result.is_new_user };
+}
+
+/** @deprecated Use signInUser */
+export async function registerUser(name: string, email = ""): Promise<StoredUser> {
+  const { user } = await signInUser(name, email);
+  return user;
 }
 
 export async function ensureUser(): Promise<string> {
   const existing = loadStoredUser();
   if (existing) return existing.user_id;
 
-  const user = await registerUser(
+  const user = await signInUser(
     `User ${Math.random().toString(36).slice(2, 7)}`,
+    `anon-${Math.random().toString(36).slice(2, 9)}@local.dev`,
   );
-  return user.user_id;
+  return user.user.user_id;
 }
 
 export async function refreshStoredUser(): Promise<StoredUser | null> {

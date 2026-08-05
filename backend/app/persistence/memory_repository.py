@@ -24,6 +24,13 @@ class MemoryRepository:
     def get_user(self, user_id: str) -> Optional[UserRecord]:
         return self._users.get(user_id)
 
+    def get_user_by_email(self, email: str) -> Optional[UserRecord]:
+        normalized = email.strip().lower()
+        for user in self._users.values():
+            if user.email.strip().lower() == normalized:
+                return user
+        return None
+
     def list_users(self) -> list[UserRecord]:
         return list(self._users.values())
 

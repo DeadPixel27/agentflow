@@ -4,7 +4,7 @@ Users Route — create users and list their workflows.
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import UserServiceDep, WorkflowServiceDep
+from app.api.dependencies import AuthServiceDep, UserServiceDep, WorkflowServiceDep
 from app.models.api.users import UserCreateRequest, UserResponse
 from app.models.api.workflows import WorkflowSummaryResponse
 from app.services.users.user_service import UserNotFoundError
@@ -13,9 +13,12 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.post("", response_model=UserResponse)
-async def register_user(body: UserCreateRequest, users: UserServiceDep) -> UserResponse:
-    """Create a user (no auth yet — ID is used to scope workflows)."""
-    user = users.create_user(body.name, email=body.email)
+async def register_user(body: UserCreateRequest, auth: AuthServiceDep) -> UserResponse:
+    """Create or restore a user by email (delegates to auth service)."""
+    if not body.email.strip():
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    user, _ = auth.sign_in_or_register(body.name, body.email)
     return UserResponse(
         user_id=user.user_id,
         name=user.name,
