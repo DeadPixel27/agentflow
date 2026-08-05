@@ -14,7 +14,11 @@ from pathlib import Path
 # Allow running as: python scripts/verify_supabase.py
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.persistence.supabase_client import check_supabase_connection, is_supabase_configured, get_supabase
+from app.persistence.supabase_repository import (
+    SupabaseRepository,
+    get_supabase_client,
+    is_supabase_configured,
+)
 
 REQUIRED_TABLES = ("users", "workflows", "workflow_steps", "workflow_runs", "workflow_step_runs")
 
@@ -28,7 +32,7 @@ def main() -> int:
         print("  See backend/SUPABASE_SETUP.md")
         return 1
 
-    ok, detail = check_supabase_connection()
+    ok, detail = SupabaseRepository().health_check()
     if not ok:
         print(f"FAIL: Cannot reach Supabase — {detail}")
         print("  Check URL/key and that schema.sql was run in SQL Editor.")
@@ -36,11 +40,7 @@ def main() -> int:
 
     print("OK: Connected to Supabase")
 
-    client = get_supabase()
-    if client is None:
-        print("FAIL: Client unavailable after connect")
-        return 1
-
+    client = get_supabase_client()
     missing = []
     for table in REQUIRED_TABLES:
         try:

@@ -3,33 +3,34 @@
 import uuid
 
 from app.models.domain.user import UserRecord
-from app.persistence.store import get_user, list_users, save_user
+from app.persistence.protocols import DataRepository
 
 
 class UserNotFoundError(Exception):
     pass
 
 
-def create_user(name: str, *, email: str = "") -> UserRecord:
-    user = UserRecord(
-        user_id=str(uuid.uuid4()),
-        name=name.strip(),
-        email=email.strip(),
-    )
-    save_user(user)
-    return user
+class UserService:
+    def __init__(self, repo: DataRepository) -> None:
+        self._repo = repo
 
+    def create_user(self, name: str, *, email: str = "") -> UserRecord:
+        user = UserRecord(
+            user_id=str(uuid.uuid4()),
+            name=name.strip(),
+            email=email.strip(),
+        )
+        self._repo.save_user(user)
+        return user
 
-def fetch_user(user_id: str) -> UserRecord:
-    user = get_user(user_id)
-    if user is None:
-        raise UserNotFoundError(f"User not found: {user_id}")
-    return user
+    def fetch_user(self, user_id: str) -> UserRecord:
+        user = self._repo.get_user(user_id)
+        if user is None:
+            raise UserNotFoundError(f"User not found: {user_id}")
+        return user
 
+    def fetch_all_users(self) -> list[UserRecord]:
+        return self._repo.list_users()
 
-def fetch_all_users() -> list[UserRecord]:
-    return list_users()
-
-
-def require_user(user_id: str) -> UserRecord:
-    return fetch_user(user_id)
+    def require_user(self, user_id: str) -> UserRecord:
+        return self.fetch_user(user_id)

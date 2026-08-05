@@ -20,7 +20,7 @@ def documents_to_dicts(documents: list) -> list[dict[str, Any]]:
             "file_type": doc.file_type,
             "text": doc.text,
             "extraction_method": doc.extraction_method,
-            "file_path": str(doc.file_path),
+            "storage_key": doc.storage_key,
         }
         for doc in documents
     ]

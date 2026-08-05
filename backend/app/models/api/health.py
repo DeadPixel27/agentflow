@@ -8,3 +8,4 @@ class HealthResponse(BaseModel):
     service: str = "agentflow-api"
     persistence: str = "memory"
     database: Optional[str] = None
+    document_storage: str = "local"

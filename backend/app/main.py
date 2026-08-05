@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.agents.handlers  # noqa: F401 — register all agents on startup
-from app.api.routes import extract, health, pipeline, runs, upload, users, workflows
+from app.api.routes import auth, extract, health, pipeline, runs, upload, uploads, users, workflows
 from app.logging_config import setup_logging
 
 setup_logging()
@@ -42,8 +42,10 @@ app.add_middleware(
 
 # Register routes — each router file owns a group of endpoints
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(upload.router)
+app.include_router(uploads.router)
 app.include_router(extract.router)
 app.include_router(pipeline.router)
 app.include_router(runs.router)

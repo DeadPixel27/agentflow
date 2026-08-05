@@ -4,8 +4,9 @@ Workflows Route — save, list, and run reusable workflow templates.
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
+from app.api.dependencies import WorkflowServiceDep
 from app.api.mappers.run import to_run_response
 from app.models.api.runs import RunResponse
 from app.models.api.workflows import (
@@ -17,19 +18,10 @@ from app.models.api.workflows import (
     WorkflowSummaryResponse,
 )
 from app.models.domain.pipeline import PlannedStep
-from app.persistence.store import save_run
 from app.services.documents.upload_loader import UploadNotFoundError
-from app.services.pipeline.runner import run_pipeline
+from app.services.pipeline.runner import execute_run, start_run
 from app.services.users.user_service import UserNotFoundError
-from app.services.workflows.workflow_service import (
-    RunNotFoundError,
-    WorkflowNotFoundError,
-    create_workflow,
-    create_workflow_from_run,
-    fetch_all_workflows,
-    fetch_runs_for_workflow,
-    fetch_workflow,
-)
+from app.services.workflows.workflow_service import RunNotFoundError, WorkflowNotFoundError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -68,10 +60,13 @@ def _to_planned_steps(steps: list) -> list[PlannedStep]:
 
 
 @router.post("", response_model=WorkflowResponse)
-async def save_workflow(body: WorkflowCreateRequest) -> WorkflowResponse:
+async def save_workflow(
+    body: WorkflowCreateRequest,
+    workflows: WorkflowServiceDep,
+) -> WorkflowResponse:
     """Save a plan as a reusable workflow template."""
     try:
-        workflow = create_workflow(
+        workflow = workflows.create_workflow(
             body.user_id,
             body.name,
             _to_planned_steps(body.steps),
@@ -91,10 +86,11 @@ async def save_workflow(body: WorkflowCreateRequest) -> WorkflowResponse:
 async def save_workflow_from_run(
     run_id: str,
     body: WorkflowFromRunRequest,
+    workflows: WorkflowServiceDep,
 ) -> WorkflowResponse:
     """Save the plan from a prior run (e.g. after POST /api/runs/adhoc)."""
     try:
-        workflow = create_workflow_from_run(
+        workflow = workflows.create_workflow_from_run(
             body.user_id,
             run_id,
             body.name,
@@ -112,16 +108,17 @@ async def save_workflow_from_run(
 
 @router.get("", response_model=list[WorkflowSummaryResponse])
 async def list_workflows(
+    workflows: WorkflowServiceDep,
     user_id: Optional[str] = Query(default=None, description="Filter by owner"),
 ) -> list[WorkflowSummaryResponse]:
     """List saved workflows, optionally filtered by user."""
-    if user_id is not None:
-        try:
-            summaries = fetch_all_workflows(user_id=user_id)
-        except UserNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-    else:
-        summaries = fetch_all_workflows()
+    try:
+        if user_id is not None:
+            summaries = workflows.fetch_all_workflows(user_id=user_id)
+        else:
+            summaries = workflows.fetch_all_workflows()
+    except UserNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     return [
         WorkflowSummaryResponse(
@@ -138,10 +135,10 @@ async def list_workflows(
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
-async def get_workflow(workflow_id: str) -> WorkflowResponse:
+async def get_workflow(workflow_id: str, workflows: WorkflowServiceDep) -> WorkflowResponse:
     """Get a saved workflow with its steps."""
     try:
-        workflow = fetch_workflow(workflow_id)
+        workflow = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -149,10 +146,13 @@ async def get_workflow(workflow_id: str) -> WorkflowResponse:
 
 
 @router.get("/{workflow_id}/runs", response_model=list[RunResponse])
-async def list_workflow_runs(workflow_id: str) -> list[RunResponse]:
+async def list_workflow_runs(
+    workflow_id: str,
+    workflows: WorkflowServiceDep,
+) -> list[RunResponse]:
     """List all runs executed with this workflow."""
     try:
-        runs = fetch_runs_for_workflow(workflow_id)
+        runs = workflows.fetch_runs_for_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -163,11 +163,13 @@ async def list_workflow_runs(workflow_id: str) -> list[RunResponse]:
 async def run_saved_workflow(
     workflow_id: str,
     body: WorkflowRunRequest,
+    background_tasks: BackgroundTasks,
+    workflows: WorkflowServiceDep,
 ) -> RunResponse:
-    """Run a saved workflow on a new upload (planner skipped)."""
+    """Run a saved workflow on a new upload. Poll GET /api/runs/{id} for progress."""
     try:
-        workflow = fetch_workflow(workflow_id)
-        run = await run_pipeline(
+        workflow = workflows.fetch_workflow(workflow_id)
+        run = await start_run(
             body.upload_id,
             workflow.steps,
             workflow.task_description,
@@ -182,5 +184,5 @@ async def run_saved_workflow(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    save_run(run)
+    background_tasks.add_task(execute_run, run.run_id)
     return to_run_response(run)

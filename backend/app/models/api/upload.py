@@ -17,3 +17,15 @@ class UploadResponse(BaseModel):
     upload_id: str = Field(description="Unique ID for this batch of uploads")
     documents: list[UploadedDocument]
     message: str = "Upload successful"
+
+
+class UploadedDocumentSummary(BaseModel):
+    document_id: str
+    filename: str
+    file_type: str
+
+
+class UploadDocumentsResponse(BaseModel):
+    upload_id: str
+    documents: list[UploadedDocumentSummary]
+

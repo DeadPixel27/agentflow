@@ -1,12 +1,12 @@
 """Extract embedded text from digital PDFs (PyMuPDF)."""
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from app.agents.core.base import StepHandler, StepResult
 from app.agents.core.context import WorkflowContext
 from app.agents.core.registry import register_agent
+from app.persistence import get_document_store
 from app.services.documents.text_extractor import extract_text_from_pdf
 
 
@@ -17,6 +17,7 @@ class TextExtractHandler(StepHandler):
         config: dict[str, Any],
     ) -> StepResult:
         documents = ctx.data.get("documents", [])
+        store = get_document_store()
         updated = 0
 
         for doc in documents:
@@ -25,8 +26,12 @@ class TextExtractHandler(StepHandler):
             if doc.get("text", "").strip():
                 continue
 
-            file_path = Path(doc["file_path"])
-            text, method = await asyncio.to_thread(extract_text_from_pdf, file_path)
+            path = await store.materialize_path(ctx.upload_id, doc["document_id"])
+            try:
+                text, method = await asyncio.to_thread(extract_text_from_pdf, path)
+            finally:
+                store.release_path(path)
+
             doc["text"] = text
             doc["extraction_method"] = method
             updated += 1

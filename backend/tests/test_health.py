@@ -15,3 +15,4 @@ def test_health_returns_ok():
     assert data["service"] == "agentflow-api"
     assert data["persistence"] in ("memory", "supabase")
     assert "database" in data
+    assert data["document_storage"] in ("local", "supabase")
