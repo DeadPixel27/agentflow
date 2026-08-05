@@ -1,0 +1,49 @@
+"""Persistence interfaces — implementations live in separate files per backend."""
+
+from pathlib import Path
+from typing import Optional, Protocol
+
+from fastapi import UploadFile
+
+from app.models.domain.document import DocumentMetadata, StoredDocument
+from app.models.domain.run import RunResult
+from app.models.domain.user import UserRecord
+from app.models.domain.workflow import WorkflowRecord, WorkflowSummary
+
+
+class DataRepository(Protocol):
+    """Users, workflows, and runs — Postgres, in-memory, etc."""
+
+    @property
+    def backend_name(self) -> str:
+        """e.g. 'memory' or 'supabase'."""
+
+    def health_check(self) -> tuple[bool, str]:
+        """Return (ok, detail_message)."""
+
+    def save_user(self, user: UserRecord) -> None: ...
+    def get_user(self, user_id: str) -> Optional[UserRecord]: ...
+    def list_users(self) -> list[UserRecord]: ...
+
+    def save_run(self, run: RunResult) -> None: ...
+    def get_run(self, run_id: str) -> Optional[RunResult]: ...
+    def list_runs_by_workflow(self, workflow_id: str) -> list[RunResult]: ...
+
+    def save_workflow(self, workflow: WorkflowRecord) -> None: ...
+    def get_workflow(self, workflow_id: str) -> Optional[WorkflowRecord]: ...
+    def list_workflows(self, user_id: Optional[str] = None) -> list[WorkflowSummary]: ...
+
+
+class DocumentStorageRepository(Protocol):
+    """Uploaded file bytes — local disk, Supabase Storage, S3, etc."""
+
+    @property
+    def backend_name(self) -> str:
+        """e.g. 'local' or 'supabase'."""
+
+    async def save_document(self, upload_id: str, file: UploadFile) -> StoredDocument: ...
+    async def list_documents(self, upload_id: str) -> list[DocumentMetadata]: ...
+    async def upload_exists(self, upload_id: str) -> bool: ...
+    async def materialize_path(self, upload_id: str, document_id: str) -> Path: ...
+    def release_path(self, path: Path) -> None: ...
+    async def read_bytes(self, upload_id: str, document_id: str) -> bytes: ...

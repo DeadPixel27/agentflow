@@ -1,12 +1,12 @@
 """OCR for images and scanned PDFs (Tesseract)."""
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from app.agents.core.base import StepHandler, StepResult
 from app.agents.core.context import WorkflowContext
 from app.agents.core.registry import register_agent
+from app.persistence import get_document_store
 from app.services.documents.text_extractor import extract_text_from_image, extract_text_from_pdf
 
 
@@ -17,6 +17,7 @@ class OcrHandler(StepHandler):
         config: dict[str, Any],
     ) -> StepResult:
         documents = ctx.data.get("documents", [])
+        store = get_document_store()
         image_types = {".png", ".jpg", ".jpeg"}
         updated = 0
 
@@ -29,11 +30,14 @@ class OcrHandler(StepHandler):
             if not needs_ocr:
                 continue
 
-            file_path = Path(doc["file_path"])
-            if doc.get("file_type") == ".pdf":
-                text, method = await asyncio.to_thread(extract_text_from_pdf, file_path)
-            else:
-                text, method = await asyncio.to_thread(extract_text_from_image, file_path)
+            path = await store.materialize_path(ctx.upload_id, doc["document_id"])
+            try:
+                if doc.get("file_type") == ".pdf":
+                    text, method = await asyncio.to_thread(extract_text_from_pdf, path)
+                else:
+                    text, method = await asyncio.to_thread(extract_text_from_image, path)
+            finally:
+                store.release_path(path)
 
             doc["text"] = text
             doc["extraction_method"] = method

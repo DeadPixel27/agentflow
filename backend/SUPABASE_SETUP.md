@@ -52,7 +52,33 @@ SUPABASE_SECRET_KEY=sb_secret_xxxxxxxx
 
 Keep your existing `GROQ_API_KEY` line.
 
-## 5. Verify
+## 5. Enable document storage (Supabase Storage)
+
+Uploaded PDFs/images can be stored in Supabase instead of local disk. This is required for production deploys (Railway/Vercel).
+
+### Create the bucket
+
+1. Dashboard → **Storage** → **New bucket**
+2. Name: `documents` (must match `SUPABASE_DOCUMENTS_BUCKET` in `.env`)
+3. **Public bucket**: OFF (backend serves files via API using the secret key)
+4. Click **Create bucket**
+
+### Configure `.env`
+
+```env
+DOCUMENT_STORAGE=auto
+SUPABASE_DOCUMENTS_BUCKET=documents
+```
+
+| `DOCUMENT_STORAGE` | Behavior |
+|--------------------|----------|
+| `auto` (default) | Supabase Storage when `SUPABASE_*` is set, else `backend/uploads/` |
+| `local` | Always local disk |
+| `supabase` | Always Supabase Storage |
+
+Restart the server after changing env vars.
+
+## 6. Verify
 
 ```bash
 cd backend
@@ -89,11 +115,12 @@ Expected:
   "status": "ok",
   "service": "agentflow-api",
   "persistence": "supabase",
-  "database": "connected"
+  "database": "connected",
+  "document_storage": "supabase"
 }
 ```
 
-## 6. Confirm persistence
+## 7. Confirm persistence
 
 1. Create a user via API
 2. **Restart** uvicorn
@@ -110,6 +137,8 @@ Without Supabase, data is in-memory and lost on restart.
 | `Invalid API key` | Use **secret** key, not publishable |
 | `degraded` status | Run `python scripts/verify_supabase.py` for details |
 | RLS errors | Backend uses service role key; RLS is bypassed |
+| `Bucket not found` | Create `documents` bucket in Storage (step 5) |
+| Files 404 after deploy | Set `DOCUMENT_STORAGE=auto` and configure Supabase Storage |
 
 ## Optional: view data
 

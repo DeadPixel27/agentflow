@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from "sonner";
 
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={cn("min-h-screen font-sans antialiased", inter.variable)}>
         {children}
+        <Toaster richColors position="top-right" closeButton />
       </body>
     </html>
   );

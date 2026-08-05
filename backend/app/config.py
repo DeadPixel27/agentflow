@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_secret_key: str = ""
 
+    # Document file storage: auto | local | supabase
+    document_storage: str = "auto"
+    supabase_documents_bucket: str = "documents"
+
+    # Data persistence: auto | memory | supabase
+    persistence_backend: str = "auto"
+
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024

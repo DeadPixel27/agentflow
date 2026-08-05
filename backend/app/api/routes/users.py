@@ -4,18 +4,18 @@ Users Route — create users and list their workflows.
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.dependencies import UserServiceDep, WorkflowServiceDep
 from app.models.api.users import UserCreateRequest, UserResponse
 from app.models.api.workflows import WorkflowSummaryResponse
-from app.services.users.user_service import UserNotFoundError, create_user, fetch_all_users, fetch_user
-from app.services.workflows.workflow_service import fetch_workflows_for_user
+from app.services.users.user_service import UserNotFoundError
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.post("", response_model=UserResponse)
-async def register_user(body: UserCreateRequest) -> UserResponse:
+async def register_user(body: UserCreateRequest, users: UserServiceDep) -> UserResponse:
     """Create a user (no auth yet — ID is used to scope workflows)."""
-    user = create_user(body.name, email=body.email)
+    user = users.create_user(body.name, email=body.email)
     return UserResponse(
         user_id=user.user_id,
         name=user.name,
@@ -25,7 +25,7 @@ async def register_user(body: UserCreateRequest) -> UserResponse:
 
 
 @router.get("", response_model=list[UserResponse])
-async def list_all_users() -> list[UserResponse]:
+async def list_all_users(users: UserServiceDep) -> list[UserResponse]:
     """List all users."""
     return [
         UserResponse(
@@ -34,15 +34,15 @@ async def list_all_users() -> list[UserResponse]:
             email=user.email,
             created_at=user.created_at,
         )
-        for user in fetch_all_users()
+        for user in users.fetch_all_users()
     ]
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str) -> UserResponse:
+async def get_user(user_id: str, users: UserServiceDep) -> UserResponse:
     """Get a user by ID."""
     try:
-        user = fetch_user(user_id)
+        user = users.fetch_user(user_id)
     except UserNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -55,10 +55,13 @@ async def get_user(user_id: str) -> UserResponse:
 
 
 @router.get("/{user_id}/workflows", response_model=list[WorkflowSummaryResponse])
-async def list_user_workflows(user_id: str) -> list[WorkflowSummaryResponse]:
+async def list_user_workflows(
+    user_id: str,
+    workflows: WorkflowServiceDep,
+) -> list[WorkflowSummaryResponse]:
     """List workflows owned by a user."""
     try:
-        workflows = fetch_workflows_for_user(user_id)
+        items = workflows.fetch_workflows_for_user(user_id)
     except UserNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -72,5 +75,5 @@ async def list_user_workflows(user_id: str) -> list[WorkflowSummaryResponse]:
             step_count=item.step_count,
             created_at=item.created_at,
         )
-        for item in workflows
+        for item in items
     ]

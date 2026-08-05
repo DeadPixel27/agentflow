@@ -47,6 +47,17 @@ export interface UploadResponse {
   message: string;
 }
 
+export interface UploadedDocumentSummary {
+  document_id: string;
+  filename: string;
+  file_type: string;
+}
+
+export interface UploadDocumentsResponse {
+  upload_id: string;
+  documents: UploadedDocumentSummary[];
+}
+
 export interface StepRun {
   step_order: number;
   agent_type: string;
@@ -82,6 +93,23 @@ export interface RunResponse {
   error_message: string | null;
 }
 
+export interface WorkflowStep {
+  step_order: number;
+  agent_type: string;
+  config: Record<string, unknown>;
+  reason: string;
+}
+
+export interface WorkflowSummary {
+  workflow_id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  source: string;
+  step_count: number;
+  created_at: string | null;
+}
+
 export interface WorkflowResponse {
   workflow_id: string;
   user_id: string;
@@ -89,6 +117,7 @@ export interface WorkflowResponse {
   description: string;
   source: string;
   task_description: string;
+  steps: WorkflowStep[];
   created_at: string | null;
 }
 
@@ -111,12 +140,49 @@ export async function createUser(name: string, email = ""): Promise<User> {
   });
 }
 
+export async function getUser(userId: string): Promise<User> {
+  return request<User>(`/api/users/${userId}`);
+}
+
+export async function getUserWorkflows(userId: string): Promise<WorkflowSummary[]> {
+  return request<WorkflowSummary[]>(`/api/users/${userId}/workflows`);
+}
+
+export async function getWorkflow(workflowId: string): Promise<WorkflowResponse> {
+  return request<WorkflowResponse>(`/api/workflows/${workflowId}`);
+}
+
+export async function getWorkflowRuns(workflowId: string): Promise<RunResponse[]> {
+  return request<RunResponse[]>(`/api/workflows/${workflowId}/runs`);
+}
+
+export async function runWorkflow(
+  workflowId: string,
+  uploadId: string,
+): Promise<RunResponse> {
+  return request<RunResponse>(`/api/workflows/${workflowId}/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ upload_id: uploadId }),
+  });
+}
+
 export async function uploadFiles(files: File[]): Promise<UploadResponse> {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);
   }
   return request<UploadResponse>("/api/upload", { method: "POST", body: form });
+}
+
+export async function getUploadDocuments(
+  uploadId: string,
+): Promise<UploadDocumentsResponse> {
+  return request<UploadDocumentsResponse>(`/api/uploads/${uploadId}`);
+}
+
+export function inputDocumentUrl(uploadId: string, documentId: string): string {
+  return `${API_BASE}/api/uploads/${uploadId}/documents/${documentId}`;
 }
 
 export async function runAdhoc(
