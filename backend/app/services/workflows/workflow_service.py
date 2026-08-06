@@ -9,6 +9,7 @@ from app.models.domain.run import RunResult
 from app.models.domain.workflow import WorkflowRecord
 from app.persistence.protocols import DataRepository
 from app.services.users.user_service import UserNotFoundError, UserService
+from app.validation.task_input import sanitize_task_input
 
 
 class WorkflowNotFoundError(Exception):
@@ -49,7 +50,7 @@ class WorkflowService:
             name=name.strip(),
             description=description.strip(),
             source=source,
-            task_description=task_description.strip(),
+            task_description=sanitize_task_input(task_description),
             steps=sorted(steps, key=lambda s: s.step_order),
         )
         self._repo.save_workflow(workflow)

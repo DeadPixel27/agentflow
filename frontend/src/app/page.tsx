@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { TemplatePickerSection } from "@/components/template-picker";
 import { UploadZone } from "@/components/upload-zone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUser } from "@/hooks/use-user";
-import { ApiError, runAdhoc, uploadFiles } from "@/lib/api";
+import { ApiError, runAdhoc, runTemplate, uploadFiles, type PipelineTemplate } from "@/lib/api";
 import { toastError } from "@/lib/toast";
 import { ensureUser } from "@/lib/user-session";
 
@@ -67,6 +68,9 @@ export default function HomePage() {
   const { user } = useUser();
   const [files, setFiles] = useState<File[]>([]);
   const [task, setTask] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
 
@@ -86,7 +90,9 @@ export default function HomePage() {
       setPhase("Uploading documents…");
       const upload = await uploadFiles(files);
       setPhase("Starting pipeline…");
-      const run = await runAdhoc(upload.upload_id, task.trim());
+      const run = selectedTemplateId
+        ? await runTemplate(upload.upload_id, selectedTemplateId)
+        : await runAdhoc(upload.upload_id, task.trim());
       router.push(`/results/${run.run_id}`);
     } catch (e) {
       toastError(
@@ -151,6 +157,16 @@ export default function HomePage() {
           ))}
         </section>
 
+        <TemplatePickerSection
+          selectedId={selectedTemplateId}
+          disabled={loading}
+          onSelect={(template: PipelineTemplate) => {
+            setSelectedTemplateId(template.template_id);
+            setTask(template.default_task || template.task_description || "");
+          }}
+          onClear={() => setSelectedTemplateId(null)}
+        />
+
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -195,7 +211,10 @@ export default function HomePage() {
                     <button
                       key={example}
                       type="button"
-                      onClick={() => setTask(example)}
+                      onClick={() => {
+                        setSelectedTemplateId(null);
+                        setTask(example);
+                      }}
                       disabled={loading}
                       className="text-left text-xs rounded-md border px-3 py-2 hover:bg-muted/60 transition-colors disabled:opacity-50 line-clamp-2"
                     >

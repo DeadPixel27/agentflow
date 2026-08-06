@@ -2,7 +2,14 @@
 
 import { Upload } from "lucide-react";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 
+import {
+  MAX_FILES_PER_UPLOAD,
+  MAX_UPLOAD_SIZE_BYTES,
+  MAX_UPLOAD_SIZE_MB,
+  formatFileSize,
+} from "@/lib/upload-limits";
 import { cn } from "@/lib/utils";
 
 interface UploadZoneProps {
@@ -16,13 +23,29 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
 
   const addFiles = useCallback(
     (incoming: FileList | File[]) => {
-      const list = Array.from(incoming).filter((f) =>
-        [".pdf", ".png", ".jpg", ".jpeg"].some((ext) =>
-          f.name.toLowerCase().endsWith(ext),
-        ),
-      );
-      if (!list.length) return;
-      onFilesChange([...files, ...list].slice(0, 10));
+      const accepted: File[] = [];
+
+      for (const file of Array.from(incoming)) {
+        const ext = file.name.toLowerCase();
+        if (![".pdf", ".png", ".jpg", ".jpeg"].some((e) => ext.endsWith(e))) {
+          continue;
+        }
+        if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+          toast.error(
+            `"${file.name}" is too large (${formatFileSize(file.size)}). Max ${MAX_UPLOAD_SIZE_MB} MB per file.`,
+          );
+          continue;
+        }
+        accepted.push(file);
+      }
+
+      if (!accepted.length) return;
+
+      const merged = [...files, ...accepted].slice(0, MAX_FILES_PER_UPLOAD);
+      if (files.length + accepted.length > MAX_FILES_PER_UPLOAD) {
+        toast.error(`Maximum ${MAX_FILES_PER_UPLOAD} files per upload.`);
+      }
+      onFilesChange(merged);
     },
     [files, onFilesChange],
   );
@@ -50,7 +73,8 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
         <div>
           <p className="font-medium">Drop PDFs or images here</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Up to 10 files — PDF, PNG, JPG
+            Up to {MAX_FILES_PER_UPLOAD} files — PDF, PNG, JPG — max{" "}
+            {MAX_UPLOAD_SIZE_MB} MB each
           </p>
         </div>
         <label className="cursor-pointer text-sm font-medium text-primary underline-offset-4 hover:underline">
@@ -73,7 +97,12 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
               key={`${f.name}-${i}`}
               className="flex items-center justify-between rounded-md bg-muted px-3 py-2"
             >
-              <span className="truncate">{f.name}</span>
+              <span className="truncate">
+                {f.name}
+                <span className="text-muted-foreground ml-2">
+                  ({formatFileSize(f.size)})
+                </span>
+              </span>
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground ml-2 shrink-0"

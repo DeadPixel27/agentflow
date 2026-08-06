@@ -93,9 +93,16 @@ backend/
 frontend/
 ├── src/app/              # Next.js pages (/, /results/[runId])
 ├── src/components/       # UI components
-└── src/lib/                # API client
-SPEC.md
+└── src/lib/              # API client
+SPEC.md                   # Product spec (local docs in docs/ — gitignored)
 ```
+
+## Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [SPEC.md](SPEC.md) | Full product spec |
+| `docs/` | Local-only: engineering principles, gaps, roadmap (not on GitHub) |
 
 ## Environment variables
 

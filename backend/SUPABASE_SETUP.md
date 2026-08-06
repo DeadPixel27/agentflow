@@ -13,7 +13,8 @@ Follow these steps to persist users, workflows, and runs in Postgres (survives s
 1. In Supabase Dashboard → **SQL Editor** → **New query**
 2. Copy the entire contents of [`supabase/schema.sql`](supabase/schema.sql)
 3. Click **Run**
-4. You should see `Success. No rows returned`
+4. Run [`supabase/seed_templates.sql`](supabase/seed_templates.sql) the same way (pipeline template catalog)
+5. You should see `Success` for both
 
 Tables created:
 
@@ -24,6 +25,7 @@ Tables created:
 | `workflow_steps` | Steps per workflow |
 | `workflow_runs` | Execution history |
 | `workflow_step_runs` | Per-step run output |
+| `pipeline_templates` | Landing-page task presets (editable in Table Editor) |
 
 > **Existing project?** Run [`supabase/migrations/002_add_users_and_run_document_ids.sql`](supabase/migrations/002_add_users_and_run_document_ids.sql) instead if you already had an older schema.
 

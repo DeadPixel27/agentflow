@@ -14,10 +14,11 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.persistence import get_document_store, get_repository
-from app.persistence.protocols import DataRepository, DocumentStorageRepository
+from app.persistence import get_document_store, get_repository, get_template_repository
+from app.persistence.protocols import DataRepository, DocumentStorageRepository, TemplateRepository
 from app.services.auth.service import AuthService
 from app.services.documents.upload_service import UploadService
+from app.services.templates.template_service import TemplateService
 from app.services.users.user_service import UserService
 from app.services.workflows.workflow_service import WorkflowService
 
@@ -53,12 +54,23 @@ def get_auth_service(repo: DataRepository = Depends(get_repo)) -> AuthService:
     return AuthService(repo)
 
 
+def get_template_repo() -> TemplateRepository:
+    return get_template_repository()
+
+
+def get_template_service(
+    templates: TemplateRepository = Depends(get_template_repo),
+) -> TemplateService:
+    return TemplateService(templates)
+
+
 RepoDep = Annotated[DataRepository, Depends(get_repo)]
 DocStoreDep = Annotated[DocumentStorageRepository, Depends(get_doc_store)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 WorkflowServiceDep = Annotated[WorkflowService, Depends(get_workflow_service)]
 UploadServiceDep = Annotated[UploadService, Depends(get_upload_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 
 
 __all__ = [
@@ -68,9 +80,12 @@ __all__ = [
     "UploadServiceDep",
     "UserServiceDep",
     "WorkflowServiceDep",
+    "TemplateServiceDep",
     "get_auth_service",
     "get_doc_store",
     "get_repo",
+    "get_template_repo",
+    "get_template_service",
     "get_upload_service",
     "get_user_service",
     "get_workflow_service",

@@ -57,3 +57,26 @@ create index if not exists idx_workflows_user_id on workflows(user_id);
 create index if not exists idx_workflow_steps_workflow_id on workflow_steps(workflow_id);
 create index if not exists idx_workflow_runs_workflow_id on workflow_runs(workflow_id);
 create index if not exists idx_workflow_step_runs_run_id on workflow_step_runs(run_id);
+
+-- Pipeline templates (editable catalog — seed via supabase/seed_templates.sql)
+create table if not exists pipeline_templates (
+    id text primary key,
+    name text not null,
+    description text not null default '',
+    icon text not null default 'file-text',
+    category text not null default 'general',
+    default_task text not null,
+    fields jsonb not null default '[]',
+    extraction_instructions text not null default '',
+    rules jsonb not null default '[]',
+    output_format text not null default 'json',
+    suggested_steps jsonb not null default '[]',
+    example_output_fields jsonb not null default '[]',
+    sort_order int not null default 0,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_pipeline_templates_category on pipeline_templates(category);
+create index if not exists idx_pipeline_templates_active_sort on pipeline_templates(is_active, sort_order);

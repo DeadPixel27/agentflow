@@ -7,6 +7,7 @@ from fastapi import UploadFile
 
 from app.models.domain.document import DocumentMetadata, StoredDocument
 from app.models.domain.run import RunResult
+from app.models.domain.template import PipelineTemplate
 from app.models.domain.user import UserRecord
 from app.models.domain.workflow import WorkflowRecord, WorkflowSummary
 
@@ -33,6 +34,23 @@ class DataRepository(Protocol):
     def save_workflow(self, workflow: WorkflowRecord) -> None: ...
     def get_workflow(self, workflow_id: str) -> Optional[WorkflowRecord]: ...
     def list_workflows(self, user_id: Optional[str] = None) -> list[WorkflowSummary]: ...
+
+
+class TemplateRepository(Protocol):
+    """Pipeline template catalog — Postgres or in-memory seeds."""
+
+    @property
+    def backend_name(self) -> str:
+        """e.g. 'memory' or 'supabase'."""
+
+    def list_templates(
+        self,
+        *,
+        category: Optional[str] = None,
+        active_only: bool = True,
+    ) -> list[PipelineTemplate]: ...
+
+    def get_template(self, template_id: str) -> Optional[PipelineTemplate]: ...
 
 
 class DocumentStorageRepository(Protocol):

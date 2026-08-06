@@ -1,5 +1,6 @@
 """Apply flag/filter rules to extracted rows."""
 
+from datetime import date, datetime
 from typing import Any
 
 from app.agents.core.base import StepHandler, StepResult
@@ -42,7 +43,11 @@ class RulesHandler(StepHandler):
 
                 try:
                     compare_fn = _OPERATORS.get(operator)
-                    if compare_fn and compare_fn(field_value, value):
+                    if compare_fn is None:
+                        continue
+                    resolved_value = _resolve_compare_value(value)
+                    resolved_field = _resolve_field_value(field_value)
+                    if compare_fn(resolved_field, resolved_value):
                         flags[flag_name] = True
                         flagged_count += 1
                 except TypeError:
@@ -54,6 +59,21 @@ class RulesHandler(StepHandler):
         return StepResult(
             output={"rules_applied": len(rules), "flags_raised": flagged_count}
         )
+
+
+def _resolve_compare_value(value: Any) -> Any:
+    if value == "today":
+        return date.today().isoformat()
+    return value
+
+
+def _resolve_field_value(value: Any) -> Any:
+    if isinstance(value, str) and len(value) >= 10 and value[4] == "-" and value[7] == "-":
+        try:
+            return datetime.strptime(value[:10], "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            return value
+    return value
 
 
 register_agent(

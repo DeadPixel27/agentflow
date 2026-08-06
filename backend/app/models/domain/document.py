@@ -29,3 +29,7 @@ class UploadNotFoundError(Exception):
 
 class DocumentNotFoundError(Exception):
     """Raised when a document is not found within an upload batch."""
+
+
+class InvalidUploadError(Exception):
+    """Raised when an upload fails validation (type, size, or content)."""

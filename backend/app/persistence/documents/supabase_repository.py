@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 
 from app.config import settings
 from app.models.domain.document import (
@@ -14,7 +14,11 @@ from app.models.domain.document import (
     StoredDocument,
     UploadNotFoundError,
 )
-from app.persistence.documents.validation import media_type_for, validate_upload_file
+from app.persistence.documents.validation import (
+    media_type_for,
+    validate_file_content,
+    validate_upload_file,
+)
 from app.persistence.supabase_repository import get_supabase_client
 
 logger = logging.getLogger("storage")
@@ -40,11 +44,7 @@ class SupabaseDocumentRepository:
         storage_path = self._object_path(upload_id, object_name)
 
         content = await file.read()
-        if len(content) > settings.max_upload_size_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max size: {settings.max_upload_size_mb} MB",
-            )
+        validate_file_content(content, ext)
 
         get_supabase_client().storage.from_(self._bucket()).upload(
             storage_path,

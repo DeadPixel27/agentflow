@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from app.api.dependencies import WorkflowServiceDep
+from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
 from app.models.api.runs import RunResponse
 from app.models.api.workflows import (
@@ -17,7 +18,6 @@ from app.models.api.workflows import (
     WorkflowStepResponse,
     WorkflowSummaryResponse,
 )
-from app.models.domain.pipeline import PlannedStep
 from app.services.documents.upload_loader import UploadNotFoundError
 from app.services.pipeline.runner import execute_run, start_run
 from app.services.users.user_service import UserNotFoundError
@@ -47,18 +47,6 @@ def _to_workflow_response(workflow) -> WorkflowResponse:
     )
 
 
-def _to_planned_steps(steps: list) -> list[PlannedStep]:
-    return [
-        PlannedStep(
-            step_order=step.step_order,
-            agent_type=step.agent_type,
-            config=step.config,
-            reason=step.reason,
-        )
-        for step in steps
-    ]
-
-
 @router.post("", response_model=WorkflowResponse)
 async def save_workflow(
     body: WorkflowCreateRequest,
@@ -69,7 +57,7 @@ async def save_workflow(
         workflow = workflows.create_workflow(
             body.user_id,
             body.name,
-            _to_planned_steps(body.steps),
+            to_planned_steps(body.steps),
             description=body.description,
             source=body.source,
             task_description=body.task_description,

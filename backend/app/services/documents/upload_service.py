@@ -8,17 +8,15 @@ import uuid
 
 from fastapi import UploadFile
 
+from app.config import settings
 from app.models.api.upload import UploadResponse, UploadedDocument
+from app.models.domain.document import InvalidUploadError
 from app.persistence.protocols import DocumentStorageRepository
 from app.services.documents.text_extractor import ExtractionResult, extract_text
 
 logger = logging.getLogger("upload")
 
 MAX_FILES_PER_UPLOAD = 10
-
-
-class UploadValidationError(Exception):
-    """Raised when upload batch fails business-rule validation."""
 
 
 class UploadService:
@@ -44,9 +42,26 @@ class UploadService:
 
     def _validate_batch(self, files: list[UploadFile]) -> None:
         if not files:
-            raise UploadValidationError("At least one file is required")
+            raise InvalidUploadError("At least one file is required")
         if len(files) > MAX_FILES_PER_UPLOAD:
-            raise UploadValidationError(f"Maximum {MAX_FILES_PER_UPLOAD} files per upload")
+            raise InvalidUploadError(f"Maximum {MAX_FILES_PER_UPLOAD} files per upload")
+
+        total_bytes = 0
+        max_total_bytes = settings.max_upload_size_bytes * MAX_FILES_PER_UPLOAD
+        for file in files:
+            if file.size is not None and file.size > settings.max_upload_size_bytes:
+                raise InvalidUploadError(
+                    f"File '{file.filename}' exceeds the "
+                    f"{settings.max_upload_size_mb} MB per-file limit"
+                )
+            if file.size is not None:
+                total_bytes += file.size
+
+        if total_bytes > max_total_bytes:
+            raise InvalidUploadError(
+                f"Total upload size exceeds "
+                f"{settings.max_upload_size_mb * MAX_FILES_PER_UPLOAD} MB"
+            )
 
     async def _process_single_file(self, file: UploadFile, upload_id: str) -> UploadedDocument:
         """Save one file and extract its text."""

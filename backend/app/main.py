@@ -16,25 +16,44 @@ HOW TO RUN:
   Then open: http://localhost:8000/docs  ← interactive API playground
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 import app.agents.handlers  # noqa: F401 — register all agents on startup
-from app.api.routes import auth, extract, health, pipeline, runs, upload, uploads, users, workflows
+from app.api.routes import auth, extract, health, pipeline, runs, templates, upload, uploads, users, workflows
+from app.config import settings
 from app.logging_config import setup_logging
+from app.persistence.templates.bootstrap import ensure_pipeline_templates_seeded
+from app.rate_limit import limiter
 
 setup_logging()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_pipeline_templates_seeded()
+    yield
+
 
 app = FastAPI(
     title="AgentFlow API",
     description="Upload documents, describe a task, AI builds and runs a pipeline.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# CORS — allows the Next.js frontend (different port) to call this API later
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js default port
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,4 +68,5 @@ app.include_router(uploads.router)
 app.include_router(extract.router)
 app.include_router(pipeline.router)
 app.include_router(runs.router)
+app.include_router(templates.router)
 app.include_router(workflows.router)
