@@ -2,11 +2,9 @@
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot (2026-08-06):** MVP + pre-deploy hardening + **screenshot-aligned template library** on `feature/pre-deploy-gaps`. **38 backend tests passing.** Templates live in `backend/app/templates/` (code canonical); `POST /api/runs/template` runs optimized pipelines. Run `backend/supabase/setup_templates.sql` to sync DB mirror. **Not deployed yet.**
+> **Progress snapshot (2026-08-06):** **Merged to `main` and `develop`** (`800cc03`). MVP + pre-deploy hardening + template library shipped. **38 backend tests passing.** Templates in `backend/app/templates/`; `POST /api/runs/template` runs optimized pipelines. Supabase configured (`pipeline_templates` seeded). **Next: deploy to Railway + Vercel.**
 
-**Central tracker:** Use the [Master Tracker](#master-tracker) section below for all open work. Detail lives in linked docs; update checkboxes here when items ship.
-
-**Docs index:** [README](./README.md) · [PROMPTS](./PROMPTS.md) · [MARKET-ANALYSIS](./MARKET-ANALYSIS.md) (stub) · Source screenshots: `docs/_archive/source-screenshots/`
+**Central tracker:** Use the [Master Tracker](#master-tracker) below. Extended planning notes live in local `docs/` (gitignored, not on GitHub).
 
 ---
 
@@ -14,9 +12,10 @@
 
 1. User uploads documents (PDFs, images, scanned files)
 2. User describes the task in plain English: *"Extract vendor name, invoice number, amount, and date. Flag anything over ₹50K. Give me a CSV."*
-3. System plans a multi-step agent pipeline automatically
-4. Each agent executes its step (OCR -> Extract -> Validate -> Format)
-5. User watches progress in real-time and downloads results
+3. User picks a **template** or describes a custom task in plain English
+4. System plans a pipeline (template = deterministic plan; custom = LLM planner)
+5. Each agent executes its step (OCR → Extract → Rules → Format)
+6. User watches progress in real-time and downloads results
 
 ---
 
@@ -25,7 +24,8 @@
 ### Core Features
 
 - [x] Upload 1-10 documents (PDF, PNG, JPG)
-- [x] Text input: describe what you want extracted/done
+- [x] Template picker on landing page (7 presets → `POST /api/runs/template`)
+- [x] Text input: describe what you want extracted/done (→ `POST /api/runs/adhoc`)
 - [x] Planner agent: breaks task into steps automatically
 - [x] Pipeline execution: runs each agent step sequentially (async background runs)
 - [x] Real-time status updates in UI (poll `GET /api/runs/{id}` every 1.5s)
@@ -93,7 +93,8 @@ Step 4: Formatter (output: CSV with flag column)
 | **Auth** | Email lookup (no password) | MVP session; future: Supabase Auth | ✅ Done |
 | **Deploy (frontend)** | Vercel | Free for personal projects | ❌ Not started |
 | **Deploy (backend)** | Railway | $5 free credit/month | ❌ Not started |
-| **Pre-deploy hardening** | CORS, rate limits, MIME, etc. | See [GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md) | 🟡 In branch |
+| **Pre-deploy hardening** | CORS, rate limits, MIME, Dockerfile, etc. | See local `docs/GAPS-TECHNICAL.md` | ✅ Done |
+| **Templates** | Code-defined presets + Supabase mirror | `backend/app/templates/` | ✅ Done |
 | **Code** | GitHub (public repo) | Recruiters will see this | ✅ [kabirrao2002/agentflow](https://github.com/kabirrao2002/agentflow) |
 
 ---
@@ -112,7 +113,7 @@ Step 4: Formatter (output: CSV with flag column)
 │  routes → Depends() → services → registry → backends     │
 │  ┌────────────┐  ┌──────────┐  ┌─────────────────────┐   │
 │  │ AuthService│  │ Planner  │  │ Pipeline Runner     │   │
-│  │ (email)    │  │ (Groq)   │  │ (async + step save) │   │
+│  │ (email)    │  │ +Template│  │ (async + step save) │   │
 │  └────────────┘  └──────────┘  └─────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ Agent Registry: OCR │ Extract │ Rules │ Format      │   │
@@ -121,6 +122,9 @@ Step 4: Formatter (output: CSV with flag column)
 │  │ persistence/registry │  │ documents/registry       │  │
 │  │ memory / supabase    │  │ local / supabase storage │  │
 │  └──────────────────────┘  └──────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ app/templates/ — 7 code-defined pipeline presets     │  │
+│  └──────────────────────────────────────────────────────┘  │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
@@ -141,6 +145,7 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 ### 1. Landing Page (`/`)
 
 - [x] Hero: "Describe your task. Upload documents. AI does the rest."
+- [x] Template picker grid (invoice, resume, contract, …)
 - [x] Upload zone (drag & drop)
 - [x] Text input for task description + example task chips
 - [x] "Run Pipeline" button → redirects to results
@@ -221,11 +226,11 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | **Registry** (wiring) | `persistence/registry.py`, `services/auth/registry.py` | Config → implementation |
 | **FastAPI Depends** | `api/dependencies.py` | Inject services into routes |
 | **Service classes** | `users/`, `workflows/`, `auth/`, `documents/`, `templates/` | Business logic |
-| **Template catalog** | `persistence/templates/` + `TemplateRepository` | DB-backed presets |
+| **Template catalog** | `app/templates/` + `persistence/templates/` | Code-defined presets; DB mirror via bootstrap |
 | **Validation utils** | `validation/task_input.py` | Task sanitization (no Pydantic → services import) |
 | **Domain errors** | `models/domain/document.py` | `InvalidUploadError` etc.; routes map to HTTP |
 
-See [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) for rules. Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
+See local `docs/ENGINEERING-PRINCIPLES.md` for coding rules. Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
 
 ---
 
@@ -284,9 +289,9 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] Document storage registry (local / Supabase Storage)
 - [x] FastAPI Depends service injection
 - [x] Email auth service (strategy pattern)
-- [x] Landing page template picker (loads from API / DB)
+- [x] Landing page template picker + `runTemplate()` API
 - [x] 38 backend tests passing
-- [x] Docs organized in `docs/`
+- [x] Local planning docs in `docs/` (gitignored)
 
 ### Week 2: Frontend ✅
 
@@ -300,21 +305,22 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] E2E tested locally
 - [x] PR #2 merged to `develop`
 
-### Week 3: Pre-deploy hardening 🟡 (in `feature/pre-deploy-gaps`)
+### Week 3: Pre-deploy hardening ✅ (merged PR #3 → `develop` → `main`)
 
 - [x] CORS from `CORS_ORIGINS` env var
-- [x] Rate limiting (`slowapi` on adhoc + upload)
+- [x] Rate limiting (`slowapi` on adhoc + upload + template runs)
 - [x] Prompt injection guard (`validation/task_input.py`)
 - [x] MIME validation (`filetype` byte sniffing)
 - [x] Per-file + batch file size limits
 - [x] LLM retry (`tenacity` on Groq client)
 - [x] Shared `to_planned_steps()` mapper
-- [x] `InvalidUploadError` domain exception (§4 error handling)
+- [x] `InvalidUploadError` domain exception
 - [x] Backend `Dockerfile` + `.dockerignore`
 - [x] Frontend `error.tsx` error boundary
-- [ ] Merge `feature/pre-deploy-gaps` → `develop`
+- [x] Code-defined templates (`backend/app/templates/`) + `POST /api/runs/template`
+- [x] Merged to `develop` and `main` (`800cc03`)
 
-### Week 3: Deploy + Demo ❌ (next after merge)
+### Week 4: Deploy + Demo ❌ (current focus)
 
 - [ ] Deploy backend to Railway
 - [ ] Deploy frontend to Vercel
@@ -323,13 +329,13 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [ ] Record 60-sec demo video
 - [ ] Root README with screenshots + live demo link
 - [ ] Add to LinkedIn / resume
-- [ ] Merge `develop` → `main` for release
+- [x] Merge `develop` → `main` for release (`800cc03`)
 
 ---
 
 ## Master Tracker
 
-> **Single source of truth for open work.** Check items here when they ship. Implementation notes: [GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md) · Sprint order: [PLAN-AND-NEXT-STEPS.md](./PLAN-AND-NEXT-STEPS.md) · Features: [FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md) · Prompts: [PROMPTS.md](./PROMPTS.md)
+> **Single source of truth for open work.** Extended notes: local `docs/GAPS-TECHNICAL.md`, `docs/PLAN-AND-NEXT-STEPS.md`, `docs/FEATURE-ROADMAP.md`, `docs/TEMPLATES.md` (gitignored).
 
 ### Gap priority (from code review)
 
@@ -346,19 +352,19 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | 9 | Add auth (Supabase Auth) | 3–4 hr | Security | ⬜ |
 | 10 | Add file content validation (`filetype`) | 30 min | Security | ✅ |
 
-**Total remaining to production-ready:** ~4–6 hours (deploy + auth + cleanup). See [GAPS-TECHNICAL.md § Priority Order](./GAPS-TECHNICAL.md#priority-order-what-to-do-next).
+**Total remaining to production-ready:** ~2–4 hours (deploy + optional auth/cleanup).
 
 ### Feature timeline (post-MVP)
 
 | Version | Feature | Effort | Doc |
 |---------|---------|--------|-----|
-| V1.0.1 | Template library (picker + API) | ~3 hr | [TEMPLATES](./TEMPLATES.md) · [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| V1.1 | Email delivery (Resend) | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| V1.2 | Google Sheets push | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| V1.3 | Chat refinement on results | High | [CHAT-REFINEMENT](./CHAT-REFINEMENT.md) |
-| V2.0 | Live PDF preview + field highlights | 6–10 hr | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| V2.0 | Auto-correct / learning from edits | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| V3.0 | Watch folder / inbox automation | 12–20 hr | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V1.0.1 | Template library (picker + API) | ~3 hr | ✅ Done — `backend/app/templates/` |
+| V1.1 | Email delivery (Resend) | Medium | `docs/FEATURE-ROADMAP.md` |
+| V1.2 | Google Sheets push | Medium | `docs/FEATURE-ROADMAP.md` |
+| V1.3 | Chat refinement on results | High | `docs/CHAT-REFINEMENT.md` |
+| V2.0 | Live PDF preview + field highlights | 6–10 hr | `docs/FEATURE-ROADMAP.md` |
+| V2.0 | Auto-correct / learning from edits | Medium | `docs/FEATURE-ROADMAP.md` |
+| V3.0 | Watch folder / inbox automation | 12–20 hr | `docs/FEATURE-ROADMAP.md` |
 
 ### Phase A — Deploy (P0)
 
@@ -366,24 +372,24 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 |--------|------|-----|
 | [x] | CORS from env var | [GAPS #3](./GAPS-TECHNICAL.md) |
 | [x] | Backend Dockerfile | [GAPS #9](./GAPS-TECHNICAL.md) |
-| [ ] | Deploy backend (Railway) + env vars | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
-| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
-| [ ] | Live smoke test (upload → run → download) | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
-| [ ] | README screenshots + live demo URL | [PLAN Phase 3](./PLAN-AND-NEXT-STEPS.md) |
-| [ ] | 60-sec demo video | [PLAN Phase 3](./PLAN-AND-NEXT-STEPS.md) |
+| [ ] | Deploy backend (Railway) + env vars | `docs/PLAN-AND-NEXT-STEPS.md` |
+| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | `docs/PLAN-AND-NEXT-STEPS.md` |
+| [ ] | Live smoke test (upload → template run → download) | `docs/PLAN-AND-NEXT-STEPS.md` |
+| [ ] | README screenshots + live demo URL | `docs/PLAN-AND-NEXT-STEPS.md` |
+| [ ] | 60-sec demo video | `docs/PLAN-AND-NEXT-STEPS.md` |
 
 ### Phase B — Security & reliability (P1)
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [x] | Rate limiting on `/api/runs/adhoc` + `/api/upload` | [GAPS #2](./GAPS-TECHNICAL.md) |
+| [x] | Rate limiting on `/api/runs/adhoc`, `/api/runs/template`, `/api/upload` | ✅ |
 | [x] | Prompt injection guard | [GAPS #4](./GAPS-TECHNICAL.md) |
 | [x] | MIME validation (`filetype`) | [GAPS #5](./GAPS-TECHNICAL.md) |
 | [x] | File size limits (per-file + batch) | [GAPS #5](./GAPS-TECHNICAL.md) |
 | [x] | LLM retry (429 / 5xx) | [GAPS #6](./GAPS-TECHNICAL.md) |
 | [x] | Frontend error boundary | [GAPS #10](./GAPS-TECHNICAL.md) |
 | [x] | Dedupe `_to_planned_steps()` | [GAPS #7](./GAPS-TECHNICAL.md) |
-| [ ] | Merge pre-deploy branch to `develop` | — |
+| [x] | Merge pre-deploy work to `develop` and `main` | PR #3, `800cc03` |
 
 ### Phase C — Ops & quality (P2)
 
@@ -409,16 +415,16 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [x] | `backend/app/templates/` Python modules (invoice, resume, contract, …) | [TEMPLATES.md](./TEMPLATES.md) |
-| [x] | Rich templates: `fields`, `extraction_instructions`, `rules`, `output_format` | [TEMPLATES.md](./TEMPLATES.md) |
-| [x] | `TemplateRepository` (memory + supabase) — code registry at runtime | [ENGINEERING-PRINCIPLES](./ENGINEERING-PRINCIPLES.md) |
-| [x] | `GET /api/templates` (summary) + `GET /api/templates/{id}` (full detail) | [TEMPLATES.md](./TEMPLATES.md) |
-| [x] | `POST /api/runs/template` — deterministic plan from template | [TEMPLATES.md](./TEMPLATES.md) |
-| [x] | Inject `extraction_instructions` into field extractor config | [PROMPTS.md](./PROMPTS.md) |
-| [x] | Landing page template picker + `runTemplate()` when selected | [TEMPLATES.md](./TEMPLATES.md) |
-| [x] | `pipeline_templates` table + seed SQL (DB mirror) | `backend/supabase/seed_templates.sql` |
+| [x] | `backend/app/templates/` Python modules (invoice, resume, contract, …) | `app/templates/` |
+| [x] | Rich templates: `fields`, `extraction_instructions`, `rules`, `output_format` | `app/templates/` |
+| [x] | `TemplateRepository` — code registry at runtime | `persistence/templates/` |
+| [x] | `GET /api/templates` + `GET /api/templates/{id}` | API |
+| [x] | `POST /api/runs/template` — deterministic plan from template | API |
+| [x] | Inject `extraction_instructions` into field extractor config | `template_planner.py` |
+| [x] | Landing page template picker + `runTemplate()` when selected | Frontend |
+| [x] | `pipeline_templates` table + seed SQL (DB mirror) | `supabase/seed_templates.sql` |
 | [x] | Bootstrap syncs code templates to Supabase on startup | `bootstrap.py` |
-| [ ] | Run `setup_templates.sql` in Supabase (upgrade existing table) | `backend/supabase/setup_templates.sql` |
+| [x] | Run `setup_templates.sql` in Supabase | User completed |
 | [ ] | Category filter UI (API supports `?category=`) | optional V1.0.2 |
 
 ### Phase F — Product features (V1.1+)
@@ -480,7 +486,6 @@ Legacy list — see [Master Tracker](#master-tracker) for live status.
 - [ ] Supabase Auth (password / magic link) — Phase D
 - [ ] SSE/WebSockets instead of polling — Phase H
 - [ ] S3 document backend — Phase H
-- [ ] Merge `develop` → `main` for release — Phase A
 
 ---
 
@@ -512,4 +517,4 @@ This is not a tutorial project. This is production-level architecture on a publi
 ---
 
 *Created: 2026-08-02*  
-*Updated: 2026-08-06 — Template library aligned with screenshot spec (code modules + template runs)*
+*Updated: 2026-08-06 — Merged to main (`800cc03`); deploy is next*
