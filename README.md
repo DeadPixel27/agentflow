@@ -93,9 +93,19 @@ backend/
 frontend/
 ├── src/app/              # Next.js pages (/, /results/[runId])
 ├── src/components/       # UI components
-└── src/lib/                # API client
-SPEC.md
+└── src/lib/              # API client
+docs/                     # Spec, engineering principles, gaps, roadmap
 ```
+
+## Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/README.md](docs/README.md) | Documentation index |
+| [docs/SPEC.md](docs/SPEC.md) | Full product spec |
+| [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | **How to write code in this repo** |
+| [docs/GAPS-TECHNICAL.md](docs/GAPS-TECHNICAL.md) | Pre-deploy checklist |
+| [docs/PLAN-AND-NEXT-STEPS.md](docs/PLAN-AND-NEXT-STEPS.md) | Sprint plan |
 
 ## Environment variables
 

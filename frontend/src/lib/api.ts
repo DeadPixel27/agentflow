@@ -73,6 +73,31 @@ export interface PlannedStep {
   reason: string;
 }
 
+export interface PipelineTemplateSummary {
+  template_id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+}
+
+export interface PipelineTemplate extends PipelineTemplateSummary {
+  task_description?: string;
+  default_task: string;
+  fields?: string[];
+  extraction_instructions?: string;
+  rules?: Record<string, unknown>[];
+  output_format?: string;
+  suggested_steps?: string[];
+  example_output_fields?: string[];
+  sort_order?: number;
+}
+
+export interface TemplateListResponse {
+  templates: PipelineTemplateSummary[];
+  count: number;
+}
+
 export interface RunResult {
   format?: string;
   content?: string;
@@ -193,6 +218,29 @@ export async function getUploadDocuments(
 
 export function inputDocumentUrl(uploadId: string, documentId: string): string {
   return `${API_BASE}/api/uploads/${uploadId}/documents/${documentId}`;
+}
+
+export async function listTemplates(category?: string): Promise<TemplateListResponse> {
+  const query = category ? `?category=${encodeURIComponent(category)}` : "";
+  return request<TemplateListResponse>(`/api/templates${query}`);
+}
+
+export async function getTemplate(templateId: string): Promise<PipelineTemplate> {
+  return request<PipelineTemplate>(`/api/templates/${templateId}`);
+}
+
+export async function runTemplate(
+  uploadId: string,
+  templateId: string,
+): Promise<RunResponse> {
+  return request<RunResponse>("/api/runs/template", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      upload_id: uploadId,
+      template_id: templateId,
+    }),
+  });
 }
 
 export async function runAdhoc(

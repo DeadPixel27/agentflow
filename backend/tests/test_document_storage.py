@@ -41,7 +41,7 @@ async def test_save_list_and_read(store):
 @pytest.mark.asyncio
 async def test_materialize_path(store):
     upload_id = "batch-2"
-    saved = await store.save_document(upload_id, _upload_file("scan.png", b"\x89PNG"))
+    saved = await store.save_document(upload_id, _upload_file("scan.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 16))
 
     path = await store.materialize_path(upload_id, saved.document_id)
     assert path.exists()

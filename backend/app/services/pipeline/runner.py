@@ -17,6 +17,7 @@ from app.models.domain.pipeline import PlannedStep
 from app.models.domain.run import RunResult, StepRunRecord
 from app.persistence import get_run, save_run
 from app.services.documents.upload_loader import load_upload_documents
+from app.validation.task_input import sanitize_task_input
 
 logger = logging.getLogger("runner")
 
@@ -43,7 +44,7 @@ async def start_run(
     run = RunResult(
         run_id=run_id,
         upload_id=upload_id,
-        task_description=task_description,
+        task_description=sanitize_task_input(task_description),
         status="running",
         steps=[
             StepRunRecord(

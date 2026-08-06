@@ -18,6 +18,11 @@ class RunRequest(BaseModel):
     task_description: str = ""
 
 
+class RunTemplateRequest(BaseModel):
+    upload_id: str
+    template_id: str = Field(min_length=1)
+
+
 class RunAdhocRequest(BaseModel):
     upload_id: str
     task_description: str = Field(min_length=1)

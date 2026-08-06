@@ -2,7 +2,11 @@
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot (2026-08-05):** Full-stack MVP complete on `develop`. Backend + Next.js frontend E2E tested locally with Supabase (Postgres + Storage). PR #2 merged. Production deploy, README polish, and demo video not started yet.
+> **Progress snapshot (2026-08-06):** MVP + pre-deploy hardening + **screenshot-aligned template library** on `feature/pre-deploy-gaps`. **38 backend tests passing.** Templates live in `backend/app/templates/` (code canonical); `POST /api/runs/template` runs optimized pipelines. Run `backend/supabase/setup_templates.sql` to sync DB mirror. **Not deployed yet.**
+
+**Central tracker:** Use the [Master Tracker](#master-tracker) section below for all open work. Detail lives in linked docs; update checkboxes here when items ship.
+
+**Docs index:** [README](./README.md) · [PROMPTS](./PROMPTS.md) · [MARKET-ANALYSIS](./MARKET-ANALYSIS.md) (stub) · Source screenshots: `docs/_archive/source-screenshots/`
 
 ---
 
@@ -89,6 +93,7 @@ Step 4: Formatter (output: CSV with flag column)
 | **Auth** | Email lookup (no password) | MVP session; future: Supabase Auth | ✅ Done |
 | **Deploy (frontend)** | Vercel | Free for personal projects | ❌ Not started |
 | **Deploy (backend)** | Railway | $5 free credit/month | ❌ Not started |
+| **Pre-deploy hardening** | CORS, rate limits, MIME, etc. | See [GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md) | 🟡 In branch |
 | **Code** | GitHub (public repo) | Recruiters will see this | ✅ [kabirrao2002/agentflow](https://github.com/kabirrao2002/agentflow) |
 
 ---
@@ -174,7 +179,10 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | GET | `/api/uploads/{id}` | List documents in upload batch | ✅ |
 | GET | `/api/uploads/{id}/documents/{doc_id}` | Download input document | ✅ |
 | POST | `/api/pipeline/create` | Plan pipeline from task + upload | ✅ |
+| GET | `/api/templates` | List pipeline templates (summary: id, name, icon, category) | ✅ |
+| GET | `/api/templates/{id}` | Get full template (fields, rules, extraction_instructions) | ✅ |
 | POST | `/api/runs/adhoc` | Plan + start run (background) | ✅ |
+| POST | `/api/runs/template` | Run from template id (deterministic plan) | ✅ |
 | POST | `/api/runs` | Run explicit steps (background) | ✅ |
 | GET | `/api/runs/{id}` | Poll run status + results | ✅ |
 
@@ -212,15 +220,18 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | **Protocol** (interface) | `persistence/protocols.py`, `services/auth/protocols.py` | Contracts for backends |
 | **Registry** (wiring) | `persistence/registry.py`, `services/auth/registry.py` | Config → implementation |
 | **FastAPI Depends** | `api/dependencies.py` | Inject services into routes |
-| **Service classes** | `users/`, `workflows/`, `auth/`, `documents/` | Business logic |
+| **Service classes** | `users/`, `workflows/`, `auth/`, `documents/`, `templates/` | Business logic |
+| **Template catalog** | `persistence/templates/` + `TemplateRepository` | DB-backed presets |
+| **Validation utils** | `validation/task_input.py` | Task sanitization (no Pydantic → services import) |
+| **Domain errors** | `models/domain/document.py` | `InvalidUploadError` etc.; routes map to HTTP |
 
-Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
+See [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) for rules. Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
 
 ---
 
 ## Database Schema
 
-> Implemented in `backend/supabase/schema.sql`. Tables: `users`, `workflows`, `workflow_steps`, `workflow_runs`, `workflow_step_runs`.
+> Implemented in `backend/supabase/schema.sql`. Seed templates via `supabase/seed_templates.sql`.
 
 | Table | Purpose |
 |-------|---------|
@@ -229,10 +240,9 @@ Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + e
 | `workflow_steps` | Steps belonging to a workflow |
 | `workflow_runs` | Execution records (status, result JSON, planned_steps) |
 | `workflow_step_runs` | Per-step status + output during a run |
+| `pipeline_templates` | Editable task presets (landing page; not user workflows) |
 
 Document files are stored in **Supabase Storage** (`Documents` bucket), not in Postgres.
-
----
 
 ## Environment Variables
 
@@ -246,12 +256,17 @@ PERSISTENCE_BACKEND=auto        # auto | memory | supabase
 DOCUMENT_STORAGE=auto           # auto | local | supabase
 SUPABASE_DOCUMENTS_BUCKET=Documents   # must match bucket name exactly (case-sensitive)
 AUTH_BACKEND=email              # email | supabase (future)
+CORS_ORIGINS=http://localhost:3000    # comma-separated; set prod URL on deploy
+RATE_LIMIT_RUNS_ADHOC=10/minute
+RATE_LIMIT_UPLOAD=20/minute
+MAX_UPLOAD_SIZE_MB=10
 ```
 
 ### Frontend (`frontend/.env.local`)
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 ```
 
 ---
@@ -269,7 +284,9 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - [x] Document storage registry (local / Supabase Storage)
 - [x] FastAPI Depends service injection
 - [x] Email auth service (strategy pattern)
-- [x] 19 backend tests passing
+- [x] Landing page template picker (loads from API / DB)
+- [x] 38 backend tests passing
+- [x] Docs organized in `docs/`
 
 ### Week 2: Frontend ✅
 
@@ -283,22 +300,187 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - [x] E2E tested locally
 - [x] PR #2 merged to `develop`
 
-### Week 3: Deploy + Demo ❌ (next)
+### Week 3: Pre-deploy hardening 🟡 (in `feature/pre-deploy-gaps`)
+
+- [x] CORS from `CORS_ORIGINS` env var
+- [x] Rate limiting (`slowapi` on adhoc + upload)
+- [x] Prompt injection guard (`validation/task_input.py`)
+- [x] MIME validation (`filetype` byte sniffing)
+- [x] Per-file + batch file size limits
+- [x] LLM retry (`tenacity` on Groq client)
+- [x] Shared `to_planned_steps()` mapper
+- [x] `InvalidUploadError` domain exception (§4 error handling)
+- [x] Backend `Dockerfile` + `.dockerignore`
+- [x] Frontend `error.tsx` error boundary
+- [ ] Merge `feature/pre-deploy-gaps` → `develop`
+
+### Week 3: Deploy + Demo ❌ (next after merge)
 
 - [ ] Deploy backend to Railway
 - [ ] Deploy frontend to Vercel
-- [ ] Set production env vars + CORS
+- [ ] Set production env vars + `CORS_ORIGINS`
 - [ ] End-to-end smoke test on live URLs
 - [ ] Record 60-sec demo video
-- [ ] Root README with screenshots + architecture
+- [ ] Root README with screenshots + live demo link
 - [ ] Add to LinkedIn / resume
-
-### Future (post-MVP)
-
-- [ ] Supabase Auth (password / magic link) — replace email-only provider
-- [ ] SSE/WebSockets instead of polling
-- [ ] S3 document backend (registry ready)
 - [ ] Merge `develop` → `main` for release
+
+---
+
+## Master Tracker
+
+> **Single source of truth for open work.** Check items here when they ship. Implementation notes: [GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md) · Sprint order: [PLAN-AND-NEXT-STEPS.md](./PLAN-AND-NEXT-STEPS.md) · Features: [FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md) · Prompts: [PROMPTS.md](./PROMPTS.md)
+
+### Gap priority (from code review)
+
+| # | Task | Time | Impact | Status |
+|---|------|------|--------|--------|
+| 1 | Fix CORS (env var) | 10 min | Deploy blocker | ✅ |
+| 2 | Add rate limiting | 30 min | Cost protection | ✅ |
+| 3 | Add Dockerfile | 15 min | Deploy blocker | ✅ |
+| 4 | Add prompt injection guard | 30 min | Security | ✅ |
+| 5 | Add LLM retry | 20 min | Reliability | ✅ |
+| 6 | Fix code duplication (`to_planned_steps`) | 10 min | Code quality | ✅ |
+| 7 | Add error boundary | 15 min | UX | ✅ |
+| 8 | Add file cleanup (24h TTL) | 1–2 hr | Privacy + cost | ⬜ |
+| 9 | Add auth (Supabase Auth) | 3–4 hr | Security | ⬜ |
+| 10 | Add file content validation (`filetype`) | 30 min | Security | ✅ |
+
+**Total remaining to production-ready:** ~4–6 hours (deploy + auth + cleanup). See [GAPS-TECHNICAL.md § Priority Order](./GAPS-TECHNICAL.md#priority-order-what-to-do-next).
+
+### Feature timeline (post-MVP)
+
+| Version | Feature | Effort | Doc |
+|---------|---------|--------|-----|
+| V1.0.1 | Template library (picker + API) | ~3 hr | [TEMPLATES](./TEMPLATES.md) · [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V1.1 | Email delivery (Resend) | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V1.2 | Google Sheets push | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V1.3 | Chat refinement on results | High | [CHAT-REFINEMENT](./CHAT-REFINEMENT.md) |
+| V2.0 | Live PDF preview + field highlights | 6–10 hr | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V2.0 | Auto-correct / learning from edits | Medium | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| V3.0 | Watch folder / inbox automation | 12–20 hr | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+
+### Phase A — Deploy (P0)
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [x] | CORS from env var | [GAPS #3](./GAPS-TECHNICAL.md) |
+| [x] | Backend Dockerfile | [GAPS #9](./GAPS-TECHNICAL.md) |
+| [ ] | Deploy backend (Railway) + env vars | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
+| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
+| [ ] | Live smoke test (upload → run → download) | [PLAN Phase 1](./PLAN-AND-NEXT-STEPS.md) |
+| [ ] | README screenshots + live demo URL | [PLAN Phase 3](./PLAN-AND-NEXT-STEPS.md) |
+| [ ] | 60-sec demo video | [PLAN Phase 3](./PLAN-AND-NEXT-STEPS.md) |
+
+### Phase B — Security & reliability (P1)
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [x] | Rate limiting on `/api/runs/adhoc` + `/api/upload` | [GAPS #2](./GAPS-TECHNICAL.md) |
+| [x] | Prompt injection guard | [GAPS #4](./GAPS-TECHNICAL.md) |
+| [x] | MIME validation (`filetype`) | [GAPS #5](./GAPS-TECHNICAL.md) |
+| [x] | File size limits (per-file + batch) | [GAPS #5](./GAPS-TECHNICAL.md) |
+| [x] | LLM retry (429 / 5xx) | [GAPS #6](./GAPS-TECHNICAL.md) |
+| [x] | Frontend error boundary | [GAPS #10](./GAPS-TECHNICAL.md) |
+| [x] | Dedupe `_to_planned_steps()` | [GAPS #7](./GAPS-TECHNICAL.md) |
+| [ ] | Merge pre-deploy branch to `develop` | — |
+
+### Phase C — Ops & quality (P2)
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [ ] | GitHub Actions CI (`pytest` + `npm run build`) | [GAPS #12](./GAPS-TECHNICAL.md) |
+| [ ] | Upload file cleanup (24h TTL sweep) | [GAPS #8](./GAPS-TECHNICAL.md) |
+| [ ] | System prompts in config/files | [GAPS #15](./GAPS-TECHNICAL.md) |
+| [ ] | Frontend tests (Vitest) | [GAPS #14](./GAPS-TECHNICAL.md) |
+| [ ] | Usage metering (Groq tokens per run) | [GAPS #13](./GAPS-TECHNICAL.md) |
+
+### Phase D — Auth (before public launch)
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [ ] | Supabase Auth provider (password / magic link) | [GAPS #1](./GAPS-TECHNICAL.md) |
+| [ ] | Frontend Supabase JS sign-in/sign-up | [GAPS #1](./GAPS-TECHNICAL.md) |
+| [ ] | Keep `email` provider for local dev/tests | [GAPS #1](./GAPS-TECHNICAL.md) |
+
+### Phase E — Template library (V1.0.1) ✅
+
+**Code canonical:** `backend/app/templates/` (7 modules) → `registry.py` → repos + bootstrap SQL sync.
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [x] | `backend/app/templates/` Python modules (invoice, resume, contract, …) | [TEMPLATES.md](./TEMPLATES.md) |
+| [x] | Rich templates: `fields`, `extraction_instructions`, `rules`, `output_format` | [TEMPLATES.md](./TEMPLATES.md) |
+| [x] | `TemplateRepository` (memory + supabase) — code registry at runtime | [ENGINEERING-PRINCIPLES](./ENGINEERING-PRINCIPLES.md) |
+| [x] | `GET /api/templates` (summary) + `GET /api/templates/{id}` (full detail) | [TEMPLATES.md](./TEMPLATES.md) |
+| [x] | `POST /api/runs/template` — deterministic plan from template | [TEMPLATES.md](./TEMPLATES.md) |
+| [x] | Inject `extraction_instructions` into field extractor config | [PROMPTS.md](./PROMPTS.md) |
+| [x] | Landing page template picker + `runTemplate()` when selected | [TEMPLATES.md](./TEMPLATES.md) |
+| [x] | `pipeline_templates` table + seed SQL (DB mirror) | `backend/supabase/seed_templates.sql` |
+| [x] | Bootstrap syncs code templates to Supabase on startup | `bootstrap.py` |
+| [ ] | Run `setup_templates.sql` in Supabase (upgrade existing table) | `backend/supabase/setup_templates.sql` |
+| [ ] | Category filter UI (API supports `?category=`) | optional V1.0.2 |
+
+### Phase F — Product features (V1.1+)
+
+| Status | Version | Feature | Doc |
+|--------|---------|---------|-----|
+| [ ] | V1.1 | Email delivery (Resend) — `output.email` agent | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [ ] | V1.2 | Google Sheets push — `output.google_sheets` | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [ ] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+| [ ] | V2.0 | Live PDF preview + field highlights | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [ ] | V2.0 | Auto-correct / learning from user edits | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [ ] | V3.0 | Watch folder / inbox automation | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+
+### Phase G — New agents (planned)
+
+| Status | Agent type | Version | Doc |
+|--------|------------|---------|-----|
+| [ ] | `output.email` | V1.1 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `output.google_sheets` | V1.2 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `transform.summarizer` | V1.3 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `transform.classifier` | V2.0 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `processor.table_extract` | V2.0 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `transform.redact` | V2.0 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `output.webhook` | V2.0 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `processor.translate` | V3.0 | [AGENTS.md](./AGENTS.md) |
+| [ ] | `trigger.watch_folder` | V3.0 | [AGENTS.md](./AGENTS.md) |
+
+### Phase H — Infrastructure & polish
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [ ] | SSE / WebSockets for run status (replace polling) | [GAPS #11](./GAPS-TECHNICAL.md) |
+| [ ] | S3 document backend (registry ready) | SPEC Future |
+| [ ] | `global-error.tsx` (optional) | [GAPS #10](./GAPS-TECHNICAL.md) |
+| [ ] | Chat refinement: cache OCR text on run for partial re-run | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+| [ ] | Chat refinement: `parent_run_id` lineage column | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+
+### Completed (reference)
+
+<details>
+<summary>MVP + docs + hardening (click to expand)</summary>
+
+- [x] All 5 v1 agents + planner + async runner
+- [x] Supabase Postgres + Storage (with in-memory/local fallback)
+- [x] Persistence + auth registry, FastAPI Depends
+- [x] Full Next.js frontend (/, results, workflows, account)
+- [x] Email sign-in, workflow save/rerun, run history
+- [x] Docs transcribed from screenshots: ENGINEERING-PRINCIPLES, GAPS-TECHNICAL, TEMPLATES, AGENTS, CHAT-REFINEMENT, FEATURE-ROADMAP, PROMPTS, README (+ MARKET-ANALYSIS stub)
+- [x] Template library (code-defined, 7 templates, `POST /api/runs/template`)
+
+</details>
+
+---
+
+### Future (quick reference)
+
+Legacy list — see [Master Tracker](#master-tracker) for live status.
+
+- [ ] Supabase Auth (password / magic link) — Phase D
+- [ ] SSE/WebSockets instead of polling — Phase H
+- [ ] S3 document backend — Phase H
+- [ ] Merge `develop` → `main` for release — Phase A
 
 ---
 
@@ -321,7 +503,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 2. **AI/LLM integration** — planner + extraction via Groq API — ✅
 3. **Python backend** — FastAPI, async runs, Depends DI, Protocol interfaces — ✅
 4. **Frontend** — Next.js, TypeScript, polling, workflows UI — ✅
-5. **Full-stack deployment** — live demo — ❌ not yet
+5. **Full-stack deployment** — live demo — ❌ not yet (Phase A)
 6. **Document processing** — OCR, PDF parsing, structured extraction — ✅
 7. **Database design** — normalized schema + JSONB + Supabase Storage — ✅
 
@@ -330,4 +512,4 @@ This is not a tutorial project. This is production-level architecture on a publi
 ---
 
 *Created: 2026-08-02*  
-*Updated: 2026-08-05*
+*Updated: 2026-08-06 — Template library aligned with screenshot spec (code modules + template runs)*

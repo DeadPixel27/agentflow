@@ -18,8 +18,10 @@ from app.config import settings
 from app.persistence.documents.local_repository import LocalDocumentRepository
 from app.persistence.documents.supabase_repository import SupabaseDocumentRepository
 from app.persistence.memory_repository import MemoryRepository
-from app.persistence.protocols import DataRepository, DocumentStorageRepository
+from app.persistence.protocols import DataRepository, DocumentStorageRepository, TemplateRepository
 from app.persistence.supabase_repository import SupabaseRepository, is_supabase_configured
+from app.persistence.templates.memory_repository import MemoryTemplateRepository
+from app.persistence.templates.supabase_repository import SupabaseTemplateRepository
 
 logger = logging.getLogger("persistence")
 
@@ -38,8 +40,14 @@ _DOCUMENT_BACKENDS: dict[str, type[DocumentStorageRepository]] = {
     # "s3": S3DocumentRepository,  # future: one file + one line here
 }
 
+_TEMPLATE_BACKENDS: dict[str, type[TemplateRepository]] = {
+    "memory": MemoryTemplateRepository,
+    "supabase": SupabaseTemplateRepository,
+}
+
 _data_instance: Optional[DataRepository] = None
 _document_instance: Optional[DocumentStorageRepository] = None
+_template_instance: Optional[TemplateRepository] = None
 
 
 def _resolve_data_backend() -> str:
@@ -68,6 +76,19 @@ def _resolve_document_backend() -> str:
     return mode
 
 
+def _resolve_template_backend() -> str:
+    mode = settings.persistence_backend.lower()
+    if mode == "auto":
+        return "supabase" if is_supabase_configured() else "memory"
+    if mode not in _TEMPLATE_BACKENDS:
+        logger.warning("Unknown PERSISTENCE_BACKEND=%s for templates — using memory", mode)
+        return "memory"
+    if mode == "supabase" and not is_supabase_configured():
+        logger.warning("Templates: supabase not configured — using memory")
+        return "memory"
+    return mode
+
+
 def get_repository() -> DataRepository:
     """Return the configured data repository (users, workflows, runs)."""
     global _data_instance
@@ -86,9 +107,22 @@ def get_document_store() -> DocumentStorageRepository:
     return _document_instance
 
 
+def get_template_repository() -> TemplateRepository:
+    """Return the configured pipeline template catalog."""
+    global _template_instance
+    backend = _resolve_template_backend()
+    if _template_instance is None or _template_instance.backend_name != backend:
+        _template_instance = _TEMPLATE_BACKENDS[backend]()
+    return _template_instance
+
+
 def get_data_backend_name() -> str:
     return _resolve_data_backend()
 
 
 def get_document_backend_name() -> str:
     return _resolve_document_backend()
+
+
+def get_template_backend_name() -> str:
+    return _resolve_template_backend()

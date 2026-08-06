@@ -3,7 +3,7 @@
 import uuid
 from pathlib import Path
 
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 
 from app.config import settings
 from app.models.domain.document import (
@@ -12,7 +12,7 @@ from app.models.domain.document import (
     StoredDocument,
     UploadNotFoundError,
 )
-from app.persistence.documents.validation import validate_upload_file
+from app.persistence.documents.validation import validate_file_content, validate_upload_file
 
 
 class LocalDocumentRepository:
@@ -44,11 +44,7 @@ class LocalDocumentRepository:
 
         dest_path = upload_folder / f"{document_id}{ext}"
         content = await file.read()
-        if len(content) > settings.max_upload_size_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max size: {settings.max_upload_size_mb} MB",
-            )
+        validate_file_content(content, ext)
 
         dest_path.write_bytes(content)
         storage_key = f"{upload_id}/{document_id}{ext}"
