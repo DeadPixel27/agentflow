@@ -94,15 +94,24 @@ frontend/
 ├── src/app/              # Next.js pages (/, /results/[runId])
 ├── src/components/       # UI components
 └── src/lib/              # API client
-SPEC.md                   # Product spec (local docs in docs/ — gitignored)
+SPEC.md                   # Product spec (also in docs/SPEC.md)
+ARCHITECTURE.md           # System architecture diagrams
+docs/                     # Engineering principles, gaps, roadmap (on GitHub)
 ```
 
 ## Documentation
 
 | Doc | Purpose |
 |-----|---------|
-| [SPEC.md](SPEC.md) | Full product spec |
-| `docs/` | Local-only: engineering principles, gaps, roadmap (not on GitHub) |
+| [SPEC.md](SPEC.md) | Full product spec + master tracker |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture diagrams (Mermaid) |
+| [docs/README.md](docs/README.md) | Documentation index |
+| [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code rules for contributors |
+| [backend/SUPABASE_SETUP.md](backend/SUPABASE_SETUP.md) | Supabase Postgres + Storage setup |
+| [backend/DOCUMENT_STORAGE.md](backend/DOCUMENT_STORAGE.md) | Persistence registry |
+| [frontend/FRONTEND.md](frontend/FRONTEND.md) | Next.js directory guide |
+
+Screenshot JPEGs under `docs/_archive/source-screenshots/` are **not** committed (transcribed into markdown).
 
 ## Environment variables
 
