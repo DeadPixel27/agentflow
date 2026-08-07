@@ -4,11 +4,23 @@ Runs Route — execute pipeline plans and fetch run results.
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
-from app.api.dependencies import RepoDep, TemplateServiceDep
+from app.api.dependencies import RefineServiceDep, RepoDep, TemplateServiceDep, VersionServiceDep
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
 from app.config import settings
-from app.models.api.runs import RunAdhocRequest, RunRequest, RunResponse, RunTemplateRequest
+from app.models.api.runs import (
+    RunAdhocRequest,
+    RunRefineRequest,
+    RunRefineResponse,
+    RunRequest,
+    RunResponse,
+    RunTemplateRequest,
+)
+from app.services.pipeline.refine_service import (
+    RunNotFoundError,
+    RunNotRefinableError,
+)
+from app.services.pipeline.pipeline_refiner import RefinerError
 from app.rate_limit import limiter
 from app.models.domain.template import TemplateNotFoundError
 from app.services.documents.upload_loader import UploadNotFoundError
@@ -55,14 +67,24 @@ async def run_template(
     body: RunTemplateRequest,
     background_tasks: BackgroundTasks,
     template_service: TemplateServiceDep,
+    versions: VersionServiceDep,
 ) -> RunResponse:
     """Run a pipeline from a template definition. Poll GET /api/runs/{id} for progress."""
     try:
         plan = await template_service.build_plan(body.template_id, body.upload_id)
+        template = template_service.get_template(body.template_id)
         run = await start_run(
             body.upload_id,
             plan.steps,
             plan.task_description,
+            template_id=template.template_id,
+            extraction_prompt=template.extraction_instructions,
+        )
+        run = versions.attach_initial_run_version(
+            run,
+            template_id=template.template_id,
+            planned_steps=run.planned_steps,
+            extraction_prompt=template.extraction_instructions,
         )
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -101,10 +123,39 @@ async def run_pipeline_steps(
     return to_run_response(run)
 
 
+@router.post("/{run_id}/refine", response_model=RunRefineResponse)
+@limiter.limit(settings.rate_limit_runs_adhoc)
+async def refine_run(
+    request: Request,
+    run_id: str,
+    body: RunRefineRequest,
+    background_tasks: BackgroundTasks,
+    refine_service: RefineServiceDep,
+) -> RunRefineResponse:
+    """Refine a completed run's pipeline via chat and start a child run."""
+    try:
+        run, summary = await refine_service.refine_and_start(run_id, body.message)
+    except RunNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RunNotRefinableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RefinerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    _schedule_run(background_tasks, run.run_id)
+    return RunRefineResponse(run=to_run_response(run), refine_summary=summary)
+
+
 @router.get("/{run_id}", response_model=RunResponse)
-async def get_run_status(run_id: str, repo: RepoDep) -> RunResponse:
+async def get_run_status(
+    run_id: str,
+    repo: RepoDep,
+    versions: VersionServiceDep,
+) -> RunResponse:
     """Fetch a run — poll while status is 'running'."""
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
-    return to_run_response(run)
+    return to_run_response(versions.hydrate_run(run))

@@ -15,6 +15,9 @@ class WorkflowRecord:
     source: str
     task_description: str
     steps: list[PlannedStep]
+    parent_template_id: Optional[str] = None
+    current_template_version_id: Optional[str] = None
+    extraction_prompt: Optional[str] = None
     created_at: Optional[str] = None
 
 

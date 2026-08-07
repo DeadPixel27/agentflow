@@ -34,6 +34,19 @@ class Settings(BaseSettings):
     # Groq LLM — field extraction
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
+    # Refiner — can use a stronger model if configured
+    groq_refiner_model: str = "llama-3.3-70b-versatile"
+    # Owner master template synthesis
+    groq_owner_model: str = "llama-3.3-70b-versatile"
+    admin_api_key: str = ""
+
+    # User template version payloads: auto | local | supabase | aws_s3
+    user_template_storage: str = "auto"
+    supabase_user_templates_bucket: str = "user-templates"
+    # Future AWS S3 swap (USER_TEMPLATE_STORAGE=aws_s3)
+    aws_s3_bucket: str = ""
+    aws_s3_region: str = ""
+    aws_s3_user_templates_prefix: str = "user-templates"
 
     # Supabase — persistence (optional; falls back to in-memory)
     supabase_url: str = ""

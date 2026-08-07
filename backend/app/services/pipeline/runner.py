@@ -8,22 +8,48 @@ in a background task with progress persisted after each step for polling.
 import logging
 import uuid
 from dataclasses import replace
-from typing import Optional
+from typing import Any, Optional
 
 import app.agents.handlers  # noqa: F401 — register agents
 from app.agents.core.context import WorkflowContext, documents_to_dicts
 from app.agents.core.registry import get_handler
 from app.models.domain.pipeline import PlannedStep
 from app.models.domain.run import RunResult, StepRunRecord
-from app.persistence import get_run, save_run
+from app.persistence import get_run, get_repository, get_user_template_store, save_run
 from app.services.documents.upload_loader import load_upload_documents
+from app.services.pipeline.extraction_prompt import (
+    read_prompt_from_steps,
+    resolve_run_extraction_prompt,
+    sync_prompt_to_steps,
+)
+from app.services.templates.user_template_version_service import UserTemplateVersionService
 from app.validation.task_input import sanitize_task_input
 
 logger = logging.getLogger("runner")
 
+_PROCESSOR_AGENTS = frozenset({"processor.ocr", "processor.text_extract"})
+
 
 def _sorted_steps(steps: list[PlannedStep]) -> list[PlannedStep]:
     return sorted(steps, key=lambda s: s.step_order)
+
+
+def _snapshot_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "document_id": doc.get("document_id", ""),
+            "filename": doc.get("filename", ""),
+            "file_type": doc.get("file_type", ""),
+            "text": doc.get("text", ""),
+            "extraction_method": doc.get("extraction_method", ""),
+            "storage_key": doc.get("storage_key", ""),
+        }
+        for doc in documents
+    ]
+
+
+def _version_service() -> UserTemplateVersionService:
+    return UserTemplateVersionService(get_repository(), get_user_template_store())
 
 
 async def start_run(
@@ -31,14 +57,34 @@ async def start_run(
     steps: list[PlannedStep],
     task_description: str = "",
     workflow_id: Optional[str] = None,
+    parent_run_id: Optional[str] = None,
+    template_id: Optional[str] = None,
+    extraction_prompt: Optional[str] = None,
+    current_template_version_id: Optional[str] = None,
+    cached_documents: Optional[list[dict[str, Any]]] = None,
+    refine_summary: Optional[str] = None,
 ) -> RunResult:
     """Create a run record in 'running' state with queued steps."""
-    documents = await load_upload_documents(upload_id)
-    if not documents:
-        raise ValueError(f"No documents found for upload {upload_id}")
-
-    document_ids = [doc.document_id for doc in documents]
+    if cached_documents:
+        document_ids = [
+            doc.get("document_id", "")
+            for doc in cached_documents
+            if doc.get("document_id")
+        ]
+        if not document_ids:
+            raise ValueError(f"No document ids in cached documents for upload {upload_id}")
+    else:
+        documents = await load_upload_documents(upload_id)
+        if not documents:
+            raise ValueError(f"No documents found for upload {upload_id}")
+        document_ids = [doc.document_id for doc in documents]
     planned = _sorted_steps(steps)
+    prompt = resolve_run_extraction_prompt(extraction_prompt, planned)
+    if not prompt:
+        prompt = read_prompt_from_steps(planned)
+    if prompt:
+        planned = sync_prompt_to_steps(planned, prompt)
+
     run_id = str(uuid.uuid4())
 
     run = RunResult(
@@ -57,13 +103,20 @@ async def start_run(
         document_ids=document_ids,
         planned_steps=planned,
         workflow_id=workflow_id,
+        parent_run_id=parent_run_id,
+        template_id=template_id,
+        current_template_version_id=current_template_version_id,
+        extraction_prompt=prompt or None,
+        cached_documents=cached_documents,
+        refine_summary=refine_summary,
     )
     save_run(run)
     logger.info(
-        "Run %s started — upload_id=%s, %d step(s)",
+        "Run %s started — upload_id=%s, %d step(s), parent=%s",
         run_id,
         upload_id,
         len(planned),
+        parent_run_id,
     )
     return run
 
@@ -78,18 +131,38 @@ async def execute_run(run_id: str) -> None:
         logger.warning("Run %s is not running (status=%s)", run_id, run.status)
         return
 
-    documents = await load_upload_documents(run.upload_id)
+    if run.cached_documents:
+        documents = run.cached_documents
+    else:
+        upload_docs = await load_upload_documents(run.upload_id)
+        documents = documents_to_dicts(upload_docs)
+
+    versions = _version_service()
+    planned, prompt = versions.resolve_run_plan(run)
+    planned = _sorted_steps(planned)
+    if prompt:
+        planned = sync_prompt_to_steps(planned, prompt)
+
     ctx = WorkflowContext(
         upload_id=run.upload_id,
         task_description=run.task_description,
-        data={"documents": documents_to_dicts(documents)},
+        data={"documents": documents},
     )
 
     step_runs = list(run.steps)
-    planned = _sorted_steps(run.planned_steps)
+    has_cached_text = bool(run.cached_documents)
 
     try:
         for index, step in enumerate(planned):
+            if has_cached_text and step.agent_type in _PROCESSOR_AGENTS:
+                step_runs[index] = replace(
+                    step_runs[index],
+                    status="skipped",
+                    output={"skipped": True, "reason": "cached_document_text"},
+                )
+                save_run(replace(run, steps=step_runs))
+                continue
+
             logger.info(
                 "Run %s — step %d: %s",
                 run_id,
@@ -110,7 +183,15 @@ async def execute_run(run_id: str) -> None:
                 status="completed",
                 output=result.output,
             )
-            save_run(replace(run, steps=step_runs))
+
+            cached = _snapshot_documents(ctx.data.get("documents", []))
+            save_run(
+                replace(
+                    run,
+                    steps=step_runs,
+                    cached_documents=cached,
+                )
+            )
 
     except Exception as e:
         logger.exception("Run %s failed at step %s", run_id, step.agent_type)
@@ -125,6 +206,7 @@ async def execute_run(run_id: str) -> None:
                 status="failed",
                 steps=step_runs,
                 error_message=str(e),
+                cached_documents=_snapshot_documents(ctx.data.get("documents", [])),
             )
         )
         return
@@ -137,6 +219,7 @@ async def execute_run(run_id: str) -> None:
             status="completed",
             steps=step_runs,
             result=final_output,
+            cached_documents=_snapshot_documents(ctx.data.get("documents", [])),
         )
     )
 

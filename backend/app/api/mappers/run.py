@@ -13,6 +13,11 @@ def to_run_response(run: RunResult) -> RunResponse:
         status=run.status,
         document_ids=run.document_ids,
         workflow_id=run.workflow_id,
+        parent_run_id=run.parent_run_id,
+        template_id=run.template_id,
+        current_template_version_id=run.current_template_version_id,
+        extraction_prompt=run.extraction_prompt,
+        refine_summary=run.refine_summary,
         planned_steps=[
             PlannedStepResponse(
                 step_order=step.step_order,

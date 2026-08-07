@@ -114,8 +114,34 @@ export interface RunResponse {
   steps: StepRun[];
   planned_steps: PlannedStep[];
   workflow_id: string | null;
+  parent_run_id?: string | null;
+  template_id?: string | null;
+  current_template_version_id?: string | null;
+  extraction_prompt?: string | null;
+  refine_summary?: string | null;
   result: RunResult | null;
   error_message: string | null;
+}
+
+export interface RunRefineResponse {
+  run: RunResponse;
+  refine_summary: string;
+}
+
+export interface TemplateVersionSummary {
+  version_id: string;
+  version_number: number;
+  refine_summary: string;
+  parent_version_id: string | null;
+  is_current: boolean;
+  created_at: string | null;
+  template_id: string;
+}
+
+export interface TemplateVersionDetail extends TemplateVersionSummary {
+  extraction_prompt: string;
+  planned_steps: PlannedStep[];
+  user_message?: string | null;
 }
 
 export interface WorkflowStep {
@@ -142,6 +168,10 @@ export interface WorkflowResponse {
   description: string;
   source: string;
   task_description: string;
+  parent_template_id?: string | null;
+  current_template_version_id?: string | null;
+  current_version_number?: number | null;
+  extraction_prompt?: string | null;
   steps: WorkflowStep[];
   created_at: string | null;
 }
@@ -257,8 +287,76 @@ export async function runAdhoc(
   });
 }
 
+export async function refineRun(
+  runId: string,
+  message: string,
+): Promise<RunRefineResponse> {
+  return request<RunRefineResponse>(`/api/runs/${runId}/refine`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+}
+
 export async function getRun(runId: string): Promise<RunResponse> {
   return request<RunResponse>(`/api/runs/${runId}`);
+}
+
+export async function getRunTemplateVersions(
+  runId: string,
+): Promise<TemplateVersionSummary[]> {
+  return request<TemplateVersionSummary[]>(`/api/runs/${runId}/template-versions`);
+}
+
+export async function getRunTemplateVersion(
+  runId: string,
+  versionId: string,
+): Promise<TemplateVersionDetail> {
+  return request<TemplateVersionDetail>(
+    `/api/runs/${runId}/template-versions/${versionId}`,
+  );
+}
+
+export async function revertRunToVersion(
+  runId: string,
+  versionId: string,
+): Promise<{ run_id: string }> {
+  return request<{ run_id: string }>(`/api/runs/${runId}/revert`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version_id: versionId }),
+  });
+}
+
+export async function getWorkflowTemplateVersions(
+  workflowId: string,
+): Promise<TemplateVersionSummary[]> {
+  return request<TemplateVersionSummary[]>(
+    `/api/workflows/${workflowId}/template-versions`,
+  );
+}
+
+export async function getWorkflowTemplateVersion(
+  workflowId: string,
+  versionId: string,
+): Promise<TemplateVersionDetail> {
+  return request<TemplateVersionDetail>(
+    `/api/workflows/${workflowId}/template-versions/${versionId}`,
+  );
+}
+
+export async function revertWorkflowToVersion(
+  workflowId: string,
+  versionId: string,
+): Promise<{ current_template_version_id: string }> {
+  return request<{ current_template_version_id: string }>(
+    `/api/workflows/${workflowId}/revert`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version_id: versionId }),
+    },
+  );
 }
 
 export async function saveWorkflowFromRun(

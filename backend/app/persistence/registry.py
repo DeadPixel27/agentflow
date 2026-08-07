@@ -18,10 +18,18 @@ from app.config import settings
 from app.persistence.documents.local_repository import LocalDocumentRepository
 from app.persistence.documents.supabase_repository import SupabaseDocumentRepository
 from app.persistence.memory_repository import MemoryRepository
-from app.persistence.protocols import DataRepository, DocumentStorageRepository, TemplateRepository
+from app.persistence.protocols import (
+    DataRepository,
+    DocumentStorageRepository,
+    TemplateRepository,
+    UserTemplateStorageRepository,
+)
 from app.persistence.supabase_repository import SupabaseRepository, is_supabase_configured
 from app.persistence.templates.memory_repository import MemoryTemplateRepository
 from app.persistence.templates.supabase_repository import SupabaseTemplateRepository
+from app.persistence.user_templates.aws_s3_repository import AwsS3UserTemplateRepository
+from app.persistence.user_templates.local_repository import LocalUserTemplateRepository
+from app.persistence.user_templates.supabase_repository import SupabaseUserTemplateRepository
 
 logger = logging.getLogger("persistence")
 
@@ -45,9 +53,16 @@ _TEMPLATE_BACKENDS: dict[str, type[TemplateRepository]] = {
     "supabase": SupabaseTemplateRepository,
 }
 
+_USER_TEMPLATE_BACKENDS: dict[str, type[UserTemplateStorageRepository]] = {
+    "local": LocalUserTemplateRepository,
+    "supabase": SupabaseUserTemplateRepository,
+    "aws_s3": AwsS3UserTemplateRepository,
+}
+
 _data_instance: Optional[DataRepository] = None
 _document_instance: Optional[DocumentStorageRepository] = None
 _template_instance: Optional[TemplateRepository] = None
+_user_template_instance: Optional[UserTemplateStorageRepository] = None
 
 
 def _resolve_data_backend() -> str:
@@ -89,6 +104,22 @@ def _resolve_template_backend() -> str:
     return mode
 
 
+def _resolve_user_template_backend() -> str:
+    mode = settings.user_template_storage.lower()
+    if mode == "auto":
+        return "supabase" if is_supabase_configured() else "local"
+    if mode not in _USER_TEMPLATE_BACKENDS:
+        logger.warning("Unknown USER_TEMPLATE_STORAGE=%s — using local", mode)
+        return "local"
+    if mode == "supabase" and not is_supabase_configured():
+        logger.warning("USER_TEMPLATE_STORAGE=supabase but not configured — using local")
+        return "local"
+    if mode == "aws_s3" and not settings.aws_s3_bucket:
+        logger.warning("USER_TEMPLATE_STORAGE=aws_s3 but AWS_S3_BUCKET not set — using local")
+        return "local"
+    return mode
+
+
 def get_repository() -> DataRepository:
     """Return the configured data repository (users, workflows, runs)."""
     global _data_instance
@@ -116,6 +147,15 @@ def get_template_repository() -> TemplateRepository:
     return _template_instance
 
 
+def get_user_template_store() -> UserTemplateStorageRepository:
+    """Return the configured user template version blob storage."""
+    global _user_template_instance
+    backend = _resolve_user_template_backend()
+    if _user_template_instance is None or _user_template_instance.backend_name != backend:
+        _user_template_instance = _USER_TEMPLATE_BACKENDS[backend]()
+    return _user_template_instance
+
+
 def get_data_backend_name() -> str:
     return _resolve_data_backend()
 
@@ -126,3 +166,7 @@ def get_document_backend_name() -> str:
 
 def get_template_backend_name() -> str:
     return _resolve_template_backend()
+
+
+def get_user_template_backend_name() -> str:
+    return _resolve_user_template_backend()

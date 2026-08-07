@@ -4,7 +4,9 @@ from typing import Optional
 
 from app.models.domain.run import RunResult
 from app.models.domain.user import UserRecord
+from app.models.domain.user_template_version import RefinementEvent, UserTemplateVersionRecord
 from app.models.domain.workflow import WorkflowRecord, WorkflowSummary
+from app.persistence.versioned_persist import strip_run_for_persist, strip_workflow_for_persist
 
 
 class MemoryRepository:
@@ -14,6 +16,8 @@ class MemoryRepository:
         self._users: dict[str, UserRecord] = {}
         self._runs: dict[str, RunResult] = {}
         self._workflows: dict[str, WorkflowRecord] = {}
+        self._template_versions: dict[str, UserTemplateVersionRecord] = {}
+        self._refinement_events: list[RefinementEvent] = []
 
     def health_check(self) -> tuple[bool, str]:
         return True, "in_memory"
@@ -35,7 +39,7 @@ class MemoryRepository:
         return list(self._users.values())
 
     def save_run(self, run: RunResult) -> None:
-        self._runs[run.run_id] = run
+        self._runs[run.run_id] = strip_run_for_persist(run)
 
     def get_run(self, run_id: str) -> Optional[RunResult]:
         return self._runs.get(run_id)
@@ -45,7 +49,7 @@ class MemoryRepository:
         return sorted(runs, key=lambda run: run.run_id, reverse=True)
 
     def save_workflow(self, workflow: WorkflowRecord) -> None:
-        self._workflows[workflow.workflow_id] = workflow
+        self._workflows[workflow.workflow_id] = strip_workflow_for_persist(workflow)
 
     def get_workflow(self, workflow_id: str) -> Optional[WorkflowRecord]:
         return self._workflows.get(workflow_id)
@@ -67,3 +71,30 @@ class MemoryRepository:
             )
             for wf in workflows
         ]
+
+    def save_template_version(self, version: UserTemplateVersionRecord) -> None:
+        self._template_versions[version.version_id] = version
+
+    def get_template_version(self, version_id: str) -> Optional[UserTemplateVersionRecord]:
+        return self._template_versions.get(version_id)
+
+    def list_template_versions(
+        self, scope_type: str, scope_id: str
+    ) -> list[UserTemplateVersionRecord]:
+        versions = [
+            version
+            for version in self._template_versions.values()
+            if version.scope_type == scope_type and version.scope_id == scope_id
+        ]
+        return sorted(versions, key=lambda version: version.version_number)
+
+    def save_refinement_event(self, event: RefinementEvent) -> None:
+        self._refinement_events.append(event)
+
+    def list_refinement_events(
+        self, template_id: Optional[str] = None, limit: int = 100
+    ) -> list[RefinementEvent]:
+        events = self._refinement_events
+        if template_id is not None:
+            events = [event for event in events if event.template_id == template_id]
+        return sorted(events, key=lambda event: event.created_at or "", reverse=True)[:limit]

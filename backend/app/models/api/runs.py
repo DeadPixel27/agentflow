@@ -23,6 +23,10 @@ class RunTemplateRequest(BaseModel):
     template_id: str = Field(min_length=1)
 
 
+class RunRefineRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+
 class RunAdhocRequest(BaseModel):
     upload_id: str
     task_description: str = Field(min_length=1)
@@ -45,5 +49,15 @@ class RunResponse(BaseModel):
     steps: list[StepRunResponse]
     planned_steps: list[PlannedStepResponse] = Field(default_factory=list)
     workflow_id: Optional[str] = None
+    parent_run_id: Optional[str] = None
+    template_id: Optional[str] = None
+    current_template_version_id: Optional[str] = None
+    extraction_prompt: Optional[str] = None
+    refine_summary: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
+
+
+class RunRefineResponse(BaseModel):
+    run: RunResponse
+    refine_summary: str

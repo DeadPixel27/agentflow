@@ -25,6 +25,7 @@ Rules:
 - Normalize dates to ISO format (YYYY-MM-DD) when possible.
 - For amounts, return numbers without currency symbols when possible.
 - Do not invent data — only extract what is present in the text.
+- If instructions include a REFINEMENT CORRECTION section, prioritize fixing those fields.
 """
 
 

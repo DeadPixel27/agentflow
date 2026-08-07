@@ -19,14 +19,14 @@ from app.models.api.workflows import (
     WorkflowSummaryResponse,
 )
 from app.services.documents.upload_loader import UploadNotFoundError
-from app.services.pipeline.runner import execute_run, start_run
+from app.services.pipeline.runner import execute_run
 from app.services.users.user_service import UserNotFoundError
 from app.services.workflows.workflow_service import RunNotFoundError, WorkflowNotFoundError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
 
-def _to_workflow_response(workflow) -> WorkflowResponse:
+def _to_workflow_response(workflow, *, current_version_number: Optional[int] = None) -> WorkflowResponse:
     return WorkflowResponse(
         workflow_id=workflow.workflow_id,
         user_id=workflow.user_id,
@@ -34,6 +34,10 @@ def _to_workflow_response(workflow) -> WorkflowResponse:
         description=workflow.description,
         source=workflow.source,
         task_description=workflow.task_description,
+        parent_template_id=workflow.parent_template_id,
+        current_template_version_id=workflow.current_template_version_id,
+        current_version_number=current_version_number,
+        extraction_prompt=workflow.extraction_prompt,
         steps=[
             WorkflowStepResponse(
                 step_order=step.step_order,
@@ -123,14 +127,20 @@ async def list_workflows(
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
-async def get_workflow(workflow_id: str, workflows: WorkflowServiceDep) -> WorkflowResponse:
+async def get_workflow(
+    workflow_id: str,
+    workflows: WorkflowServiceDep,
+) -> WorkflowResponse:
     """Get a saved workflow with its steps."""
     try:
         workflow = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    return _to_workflow_response(workflow)
+    return _to_workflow_response(
+        workflow,
+        current_version_number=workflows.current_version_number(workflow),
+    )
 
 
 @router.get("/{workflow_id}/runs", response_model=list[RunResponse])
@@ -156,13 +166,7 @@ async def run_saved_workflow(
 ) -> RunResponse:
     """Run a saved workflow on a new upload. Poll GET /api/runs/{id} for progress."""
     try:
-        workflow = workflows.fetch_workflow(workflow_id)
-        run = await start_run(
-            body.upload_id,
-            workflow.steps,
-            workflow.task_description,
-            workflow_id=workflow.workflow_id,
-        )
+        run = await workflows.start_workflow_run(workflow_id, body.upload_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except UploadNotFoundError as e:

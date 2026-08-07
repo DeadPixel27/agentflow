@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { RerunPanel } from "@/components/rerun-panel";
+import { TemplateVersionPanel } from "@/components/template-version-panel";
 import { WorkflowRunList } from "@/components/workflow-run-list";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -85,6 +86,9 @@ export default function WorkflowDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold">{workflow.name}</h1>
                 <Badge variant="secondary">{workflow.steps.length} steps</Badge>
+                {workflow.current_version_number != null && (
+                  <Badge variant="default">Using v{workflow.current_version_number}</Badge>
+                )}
                 <Badge variant="outline">{workflow.source}</Badge>
               </div>
               {workflow.description && (
@@ -94,6 +98,13 @@ export default function WorkflowDetailPage() {
                 {workflow.task_description}
               </p>
             </div>
+
+            <TemplateVersionPanel
+              scopeType="workflow"
+              scopeId={workflowId}
+              currentVersionId={workflow.current_template_version_id}
+              onWorkflowUpdated={load}
+            />
 
             <div className="grid gap-6 lg:grid-cols-2">
               <RerunPanel

@@ -32,7 +32,9 @@ RESUME_TEMPLATE = PipelineTemplate(
         "For work_experience, return array of objects: "
         "{company, title, start_date, end_date, description}. "
         "end_date should be 'Present' if currently employed. "
-        "years_of_experience should be a number calculated from earliest work start date. "
+        "years_of_experience must be total professional work years only — sum all roles "
+        "in work_experience (including internships). Do NOT use education dates. "
+        "Calculate from the earliest job start_date to today (or the latest end_date). "
         "technical_skills and soft_skills should be arrays of strings. "
         "certifications should be an array of strings."
     ),

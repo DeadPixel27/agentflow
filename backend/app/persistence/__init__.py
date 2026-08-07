@@ -7,6 +7,8 @@ from app.persistence.registry import (
     get_repository,
     get_template_backend_name,
     get_template_repository,
+    get_user_template_backend_name,
+    get_user_template_store,
 )
 
 # Backward-compatible module-level functions (delegate to active repository)
@@ -50,9 +52,11 @@ __all__ = [
     "get_repository",
     "get_document_store",
     "get_template_repository",
+    "get_user_template_store",
     "get_data_backend_name",
     "get_document_backend_name",
     "get_template_backend_name",
+    "get_user_template_backend_name",
     "save_user",
     "get_user",
     "list_users",

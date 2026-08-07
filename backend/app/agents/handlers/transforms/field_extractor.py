@@ -35,7 +35,7 @@ class FieldExtractorHandler(StepHandler):
         extracted = await extract_fields(
             doc_inputs,
             fields,
-            config.get("instructions"),
+            str(config.get("instructions") or "").strip(),
         )
 
         rows = [

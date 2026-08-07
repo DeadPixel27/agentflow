@@ -14,11 +14,14 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.persistence import get_document_store, get_repository, get_template_repository
+from app.persistence import get_document_store, get_repository, get_template_repository, get_user_template_store
 from app.persistence.protocols import DataRepository, DocumentStorageRepository, TemplateRepository
 from app.services.auth.service import AuthService
 from app.services.documents.upload_service import UploadService
+from app.services.pipeline.refine_service import RefineService
+from app.services.templates.template_master_refine_service import TemplateMasterRefineService
 from app.services.templates.template_service import TemplateService
+from app.services.templates.user_template_version_service import UserTemplateVersionService
 from app.services.users.user_service import UserService
 from app.services.workflows.workflow_service import WorkflowService
 
@@ -41,7 +44,8 @@ def get_workflow_service(
     repo: DataRepository = Depends(get_repo),
     users: UserService = Depends(get_user_service),
 ) -> WorkflowService:
-    return WorkflowService(repo, users)
+    versions = UserTemplateVersionService(repo, get_user_template_store())
+    return WorkflowService(repo, users, versions)
 
 
 def get_upload_service(
@@ -54,8 +58,24 @@ def get_auth_service(repo: DataRepository = Depends(get_repo)) -> AuthService:
     return AuthService(repo)
 
 
+def get_refine_service(repo: DataRepository = Depends(get_repo)) -> RefineService:
+    versions = UserTemplateVersionService(repo, get_user_template_store())
+    return RefineService(repo, versions)
+
+
+def get_version_service(repo: DataRepository = Depends(get_repo)) -> UserTemplateVersionService:
+    return UserTemplateVersionService(repo, get_user_template_store())
+
+
 def get_template_repo() -> TemplateRepository:
     return get_template_repository()
+
+
+def get_master_refine_service(
+    repo: DataRepository = Depends(get_repo),
+    templates: TemplateRepository = Depends(get_template_repo),
+) -> TemplateMasterRefineService:
+    return TemplateMasterRefineService(repo, templates, get_user_template_store())
 
 
 def get_template_service(
@@ -70,6 +90,9 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 WorkflowServiceDep = Annotated[WorkflowService, Depends(get_workflow_service)]
 UploadServiceDep = Annotated[UploadService, Depends(get_upload_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+RefineServiceDep = Annotated[RefineService, Depends(get_refine_service)]
+VersionServiceDep = Annotated[UserTemplateVersionService, Depends(get_version_service)]
+MasterRefineServiceDep = Annotated[TemplateMasterRefineService, Depends(get_master_refine_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 
 
@@ -80,9 +103,15 @@ __all__ = [
     "UploadServiceDep",
     "UserServiceDep",
     "WorkflowServiceDep",
+    "RefineServiceDep",
+    "VersionServiceDep",
+    "MasterRefineServiceDep",
     "TemplateServiceDep",
     "get_auth_service",
     "get_doc_store",
+    "get_refine_service",
+    "get_version_service",
+    "get_master_refine_service",
     "get_repo",
     "get_template_repo",
     "get_template_service",

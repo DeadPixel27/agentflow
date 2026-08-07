@@ -28,6 +28,10 @@ class WorkflowResponse(BaseModel):
     description: str
     source: str
     task_description: str
+    parent_template_id: Optional[str] = None
+    current_template_version_id: Optional[str] = None
+    current_version_number: Optional[int] = None
+    extraction_prompt: Optional[str] = None
     steps: list[WorkflowStepResponse]
     created_at: Optional[str] = None
 

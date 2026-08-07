@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, Loader2, SkipForward, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,9 @@ function StepIcon({ status }: { status: string }) {
   }
   if (status === "failed") {
     return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+  }
+  if (status === "skipped") {
+    return <SkipForward className="h-4 w-4 text-muted-foreground shrink-0" />;
   }
   return <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />;
 }

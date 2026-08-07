@@ -2,9 +2,12 @@
 
 import { ArrowLeft, Download, Loader2, Save } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { RefineChatPanel } from "@/components/refine-chat";
+import { TemplateVersionPanel } from "@/components/template-version-panel";
 import { AppHeader } from "@/components/app-header";
 import { ResultsTable, RunSummaryStats, StepStatusList } from "@/components/run-display";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 import { ensureUser, getStoredUserId } from "@/lib/user-session";
 
 export default function ResultsPage() {
+  const router = useRouter();
   const params = useParams();
   const runId = params.runId as string;
 
@@ -203,6 +207,23 @@ export default function ResultsPage() {
                     <ResultsTable rows={rows} />
                   </CardContent>
                 </Card>
+
+                {run.status === "completed" && (
+                  <>
+                    <TemplateVersionPanel
+                      scopeType="run"
+                      scopeId={runId}
+                      currentVersionId={run.current_template_version_id}
+                    />
+                    <RefineChatPanel
+                    runId={runId}
+                    disabled={isRunning}
+                    onRefined={(newRunId) => {
+                      router.push(`/results/${newRunId}`);
+                    }}
+                    />
+                  </>
+                )}
 
                 {!savedWorkflowId && run.status === "completed" && (
                   <Card>
