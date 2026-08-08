@@ -15,9 +15,10 @@ REFINE_SYSTEM_PROMPT = """You are a pipeline editor. Given the current pipeline 
 REFINEMENT TYPES - identify which type the user is requesting:
 
 1. FIELD CORRECTION - user says a value is wrong or formatted incorrectly
-   -> Add a reusable rule to extraction_prompt, NOT a one-time fix
-   -> Make rules GENERAL (e.g. "Dates in DD/MM format -> YYYY-MM-DD") not document-specific
-   -> NEVER hardcode a specific correct value into extraction_prompt
+   -> Add a reusable rule to extraction_prompt describing HOW to compute or normalize the field
+   -> Encode the user's correction methodology (e.g. "sum work_experience durations from start_date")
+   -> You MAY include example employers/dates the user mentioned as calculation guidance when they explain a fix
+   -> Make rules GENERAL enough to apply to similar documents, not just one document id
 
 2. ADD FIELD - user wants additional data extracted
    -> Add the field to the field_extractor step's config.fields list

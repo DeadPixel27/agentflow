@@ -215,3 +215,105 @@ def test_refine_plan_not_found():
         assert response.status_code == 404
     finally:
         app.dependency_overrides.clear()
+
+
+def test_plan_refinement_forces_ready_when_user_answers_clarification():
+    from app.services.pipeline.refine_chat import _normalize_plan_result
+
+    chat_history = [
+        {"role": "user", "content": "years of experience is wrong"},
+        {
+            "role": "assistant",
+            "content": "Can you specify the correct value for years_of_experience?",
+        },
+    ]
+    result = _normalize_plan_result(
+        {
+            "ready": False,
+            "message": "Can you specify the correct value for years_of_experience?",
+            "planned_changes": ["change years_of_experience value"],
+            "accumulated_instruction": "",
+        },
+        chat_history=chat_history,
+        latest_message="should be 2 years, working at BNY since July 2024",
+        field_names=["years_of_experience", "full_name"],
+    )
+    assert result["ready"] is True
+    assert result["accumulated_instruction"]
+    assert "years_of_experience" in result["accumulated_instruction"].lower()
+
+
+@pytest.mark.asyncio
+async def test_refine_and_start_merges_feedback_and_versions_template_run(monkeypatch):
+    from app.services.pipeline.refine_service import RefineService
+
+    repo = MemoryRepository()
+    parent = _completed_run()
+    parent.template_id = "resume"
+    repo.save_run(parent)
+
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    parent = versions.attach_initial_run_version(
+        parent,
+        template_id="resume",
+        planned_steps=parent.planned_steps,
+        extraction_prompt="Extract name",
+    )
+    repo.save_run(parent)
+
+    async def _fake_execute(self, ctx, config):
+        from app.agents.core.base import StepResult
+        from app.persistence.serialization import planned_steps_to_json
+
+        steps = ctx.data["current_steps"]
+        return StepResult(
+            output={
+                "summary": "Pipeline updated.",
+                "extraction_prompt": str(ctx.data.get("extraction_prompt") or ""),
+                "planned_steps": planned_steps_to_json(steps),
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.agents.handlers.transforms.pipeline_refiner.PipelineRefinerHandler.execute",
+        _fake_execute,
+    )
+    monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
+    monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
+
+    service = RefineService(repo, versions)
+    feedback = (
+        "years_of_experience should be ~2 years — calculate from BNY start date July 2024"
+    )
+    child, summary = await service.refine_and_start(parent.run_id, feedback)
+
+    assert child.parent_run_id == parent.run_id
+    assert child.current_template_version_id
+    assert "July 2024" in (child.extraction_prompt or "")
+    assert "years_of_experience" in (child.extraction_prompt or "").lower()
+    assert summary
+
+
+def test_plan_refinement_forces_ready_on_repeated_assistant_message():
+    from app.services.pipeline.refine_chat import _normalize_plan_result
+
+    repeated = "You want to change years_of_experience. Can you specify the correct value?"
+    chat_history = [
+        {"role": "user", "content": "years of experience is wrong"},
+        {"role": "assistant", "content": repeated},
+        {"role": "user", "content": "2 years since July 2024 at BNY"},
+        {"role": "assistant", "content": repeated},
+    ]
+    result = _normalize_plan_result(
+        {
+            "ready": False,
+            "message": repeated,
+            "planned_changes": ["change years_of_experience value"],
+            "accumulated_instruction": "",
+        },
+        chat_history=chat_history,
+        latest_message="yes apply that",
+        field_names=["years_of_experience"],
+    )
+    assert result["ready"] is True
+    assert "apply" in result["message"].lower()

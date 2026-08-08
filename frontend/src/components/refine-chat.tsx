@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Loader2, MessageSquare, Play, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -51,21 +51,28 @@ export function RefineChatPanel({
   const [readyToApply, setReadyToApply] = useState(false);
   const [accumulatedInstruction, setAccumulatedInstruction] = useState("");
 
-  // Build chat_history for the plan endpoint from our local history
-  function buildPlanHistory(): RefinePlanMessage[] {
-    return history.map((item) => ({ role: item.role, content: item.text }));
-  }
+  useEffect(() => {
+    setHistory([]);
+    setMessage("");
+    setReadyToApply(false);
+    setAccumulatedInstruction("");
+  }, [runId]);
 
   async function handleSend() {
     const text = message.trim();
     if (!text || loading || applying) return;
+
+    const planHistory: RefinePlanMessage[] = [
+      ...history.map((item) => ({ role: item.role, content: item.text })),
+      { role: "user", content: text },
+    ];
 
     setLoading(true);
     setMessage("");
     setHistory((prev) => [...prev, { role: "user", text }]);
 
     try {
-      const result = await refinePlan(runId, text, buildPlanHistory());
+      const result = await refinePlan(runId, text, planHistory);
 
       setHistory((prev) => [
         ...prev,
@@ -79,6 +86,12 @@ export function RefineChatPanel({
       if (result.ready && result.accumulated_instruction) {
         setReadyToApply(true);
         setAccumulatedInstruction(result.accumulated_instruction);
+      } else if (result.ready) {
+        setReadyToApply(true);
+        setAccumulatedInstruction(
+          result.accumulated_instruction ||
+            `Apply these refinements: ${(result.planned_changes || []).join("; ")}. User request: ${text}`,
+        );
       } else {
         setReadyToApply(false);
         setAccumulatedInstruction("");

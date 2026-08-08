@@ -1,12 +1,14 @@
 """Refine service — chat-driven pipeline edits and re-runs."""
 
+from dataclasses import replace
+
 from app.agents.core.context import WorkflowContext, documents_to_dicts
 from app.agents.core.registry import get_handler
 from app.models.domain.run import RunResult
 from app.persistence.protocols import DataRepository
 from app.persistence.serialization import planned_steps_from_json
 from app.services.documents.upload_loader import load_upload_documents
-from app.services.pipeline.extraction_prompt import sync_prompt_to_steps
+from app.services.pipeline.extraction_prompt import merge_prompt_addition, sync_prompt_to_steps
 from app.services.pipeline.pipeline_refiner import RefinerError
 from app.services.pipeline.runner import start_run
 from app.services.templates.user_template_version_service import UserTemplateVersionService
@@ -40,6 +42,8 @@ class RefineService:
         parent = self._repo.get_run(run_id)
         if parent is None:
             raise RunNotFoundError(f"Run not found: {run_id}")
+
+        parent = self._versions.hydrate_run(parent)
 
         if parent.status == "running":
             raise RunNotRefinableError("Cannot refine a run that is still in progress")
@@ -86,6 +90,13 @@ class RefineService:
         new_steps = planned_steps_from_json(output.get("planned_steps"))
         summary = str(output.get("summary", "Pipeline updated.")).strip()
         new_prompt = str(output.get("extraction_prompt") or base_prompt).strip()
+        feedback = message.strip()
+        if feedback:
+            merged = merge_prompt_addition(new_prompt, feedback)
+            if merged != new_prompt:
+                new_prompt = merged
+                if summary == "Pipeline updated.":
+                    summary = "Updated extraction instructions from your feedback."
         new_steps = sync_prompt_to_steps(new_steps, new_prompt)
 
         cached_documents = parent.cached_documents
@@ -104,4 +115,27 @@ class RefineService:
             cached_documents=cached_documents,
             refine_summary=summary,
         )
+
+        if parent.template_id:
+            version = self._versions.create_run_version(
+                scope_id=child.run_id,
+                template_id=parent.template_id,
+                planned_steps=new_steps,
+                extraction_prompt=new_prompt,
+                refine_summary=summary,
+                parent_version_id=parent.current_template_version_id,
+                user_message=feedback or None,
+            )
+            child = replace(child, current_template_version_id=version.version_id)
+            self._repo.save_run(child)
+            self._versions.log_refinement_event(
+                template_id=parent.template_id,
+                scope_type="run",
+                scope_id=child.run_id,
+                version_id=version.version_id,
+                parent_version_id=parent.current_template_version_id,
+                user_message=feedback,
+                refine_summary=summary,
+            )
+
         return child, summary

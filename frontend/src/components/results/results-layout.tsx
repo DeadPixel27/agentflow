@@ -187,7 +187,13 @@ export function ResultsLayout({
             runId={run.run_id}
             disabled={isRunning}
             documentCount={run.document_ids.length}
-            versionLabel={versionLabel}
+            versionLabel={
+              run.parent_run_id
+                ? run.refine_summary
+                  ? `refined · ${run.refine_summary.slice(0, 40)}${run.refine_summary.length > 40 ? "…" : ""}`
+                  : "refined"
+                : versionLabel
+            }
             variant="panel"
             onRefined={(newRunId) => onRefined(newRunId)}
           />
