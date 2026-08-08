@@ -30,3 +30,4 @@ docs copy/
 # Screenshot archives — content transcribed to docs/*.md; do not commit JPEGs
 docs/_archive/source-screenshots/**
 !docs/_archive/source-screenshots/README.md
+frontend-v2-opus4.6/

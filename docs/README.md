@@ -38,6 +38,7 @@ All project documentation, split by topic. Updated Aug 7, 2026.
 | [TEMPLATES.md](./TEMPLATES.md) | 7 pipeline templates with prompts, fields, rules | Building the template library |
 | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) | Chat refine flow, API design, data model, UI wireframe | Building the refine feature |
 | [AGENTS.md](./AGENTS.md) | Current 5 agents + 9 planned + how to add new ones | Adding new agent types |
+| [FRONTEND-V2-PLAN.md](./FRONTEND-V2-PLAN.md) | V2 frontend one-shot build prompt — pages, components, modals, API, file-by-file | Rebuilding the Next.js UI to V2 |
 
 ---
 
