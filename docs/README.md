@@ -39,6 +39,7 @@ All project documentation, split by topic. Updated Aug 7, 2026.
 | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) | Chat refine flow, API design, data model, UI wireframe | Building the refine feature |
 | [AGENTS.md](./AGENTS.md) | Current 5 agents + 9 planned + how to add new ones | Adding new agent types |
 | [FRONTEND-V2-PLAN.md](./FRONTEND-V2-PLAN.md) | V2 frontend one-shot build prompt — pages, components, modals, API, file-by-file | Rebuilding the Next.js UI to V2 |
+| [BACKEND-V2-PLAN.md](./BACKEND-V2-PLAN.md) | V2 backend one-shot build prompt — email, sheets, inbound, workflow PATCH/settings, auth fix | Implementing backend APIs for V2 frontend |
 
 ---
 

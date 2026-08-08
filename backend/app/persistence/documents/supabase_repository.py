@@ -128,3 +128,35 @@ class SupabaseDocumentRepository:
         object_name = await self._resolve_object_name(upload_id, document_id)
         storage_path = self._object_path(upload_id, object_name)
         return get_supabase_client().storage.from_(self._bucket()).download(storage_path)
+
+    async def save_document_bytes(
+        self,
+        upload_id: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> StoredDocument:
+        document_id = str(uuid.uuid4())
+        ext = Path(filename).suffix.lower()
+        if not ext:
+            ext = ".pdf"
+        object_name = f"{document_id}{ext}"
+        storage_path = self._object_path(upload_id, object_name)
+
+        validate_file_content(content, ext)
+
+        get_supabase_client().storage.from_(self._bucket()).upload(
+            storage_path,
+            content,
+            file_options={
+                "content-type": content_type or media_type_for(ext),
+                "upsert": "true",
+            },
+        )
+
+        return StoredDocument(
+            document_id=document_id,
+            filename=object_name,
+            file_type=ext,
+            storage_key=storage_path,
+        )

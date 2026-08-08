@@ -18,6 +18,7 @@ from app.persistence import get_document_store, get_repository, get_template_rep
 from app.persistence.protocols import DataRepository, DocumentStorageRepository, TemplateRepository
 from app.services.auth.service import AuthService
 from app.services.documents.upload_service import UploadService
+from app.services.email.inbound_service import InboundEmailService
 from app.services.pipeline.refine_service import RefineService
 from app.services.templates.template_master_refine_service import TemplateMasterRefineService
 from app.services.templates.template_service import TemplateService
@@ -84,6 +85,13 @@ def get_template_service(
     return TemplateService(templates)
 
 
+def get_inbound_email_service(
+    repo: DataRepository = Depends(get_repo),
+    store: DocumentStorageRepository = Depends(get_doc_store),
+) -> InboundEmailService:
+    return InboundEmailService(repo, store)
+
+
 RepoDep = Annotated[DataRepository, Depends(get_repo)]
 DocStoreDep = Annotated[DocumentStorageRepository, Depends(get_doc_store)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -94,11 +102,13 @@ RefineServiceDep = Annotated[RefineService, Depends(get_refine_service)]
 VersionServiceDep = Annotated[UserTemplateVersionService, Depends(get_version_service)]
 MasterRefineServiceDep = Annotated[TemplateMasterRefineService, Depends(get_master_refine_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
+InboundEmailServiceDep = Annotated[InboundEmailService, Depends(get_inbound_email_service)]
 
 
 __all__ = [
     "AuthServiceDep",
     "DocStoreDep",
+    "InboundEmailServiceDep",
     "RepoDep",
     "UploadServiceDep",
     "UserServiceDep",
@@ -109,6 +119,7 @@ __all__ = [
     "TemplateServiceDep",
     "get_auth_service",
     "get_doc_store",
+    "get_inbound_email_service",
     "get_refine_service",
     "get_version_service",
     "get_master_refine_service",

@@ -163,28 +163,40 @@ else
   WF_ID=""
 fi
 
-# --- Stub endpoints (expected to fail until backend V2) ---
+# --- V2 delivery + settings APIs ---
 echo ""
-echo "[Stub APIs — expect 404/405/422]"
+echo "[V2 APIs — email/sheets need env keys; settings should 200]"
 email_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API/api/runs/$RUN_ID/email" \
   -H "Content-Type: application/json" -d '{"to":"test@x.com","subject":"hi"}')
-[[ "$email_code" == "404" || "$email_code" == "405" || "$email_code" == "501" ]] \
-  && ok "emailResults returns $email_code (stub — UI handles gracefully)" \
+[[ "$email_code" == "502" || "$email_code" == "200" ]] \
+  && ok "emailResults returns $email_code (502 = no RESEND_API_KEY)" \
   || bad "emailResults unexpected: $email_code"
 
 sheets_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API/api/runs/$RUN_ID/sheets" \
-  -H "Content-Type: application/json" -d '{"url":"https://x.com","sheet_name":"S"}')
-[[ "$sheets_code" == "404" || "$sheets_code" == "405" || "$sheets_code" == "501" ]] \
-  && ok "pushToSheets returns $sheets_code (stub)" \
+  -H "Content-Type: application/json" -d '{"url":"https://docs.google.com/spreadsheets/d/abc/edit","sheet_name":"S"}')
+[[ "$sheets_code" == "502" || "$sheets_code" == "200" ]] \
+  && ok "pushToSheets returns $sheets_code (502 = no GOOGLE_SERVICE_ACCOUNT_JSON)" \
   || bad "pushToSheets unexpected: $sheets_code"
 
 if [[ -n "${WF_ID:-}" ]]; then
   settings_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$API/api/workflows/$WF_ID/settings" \
-    -H "Content-Type: application/json" -d '{"name":"Updated"}')
-  [[ "$settings_code" == "404" || "$settings_code" == "405" || "$settings_code" == "422" ]] \
-    && ok "updateWorkflowSettings returns $settings_code (stub)" \
+    -H "Content-Type: application/json" -d '{"name":"Updated","default_email":"ops@example.com"}')
+  [[ "$settings_code" == "200" ]] \
+    && ok "updateWorkflowSettings returns 200" \
     || bad "updateWorkflowSettings unexpected: $settings_code"
+
+  patch_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$API/api/workflows/$WF_ID" \
+    -H "Content-Type: application/json" \
+    -d "{\"from_run_id\":\"$RUN_ID\",\"version_name\":\"E2E version\"}")
+  [[ "$patch_code" == "200" ]] \
+    && ok "updateWorkflowFromRun returns 200" \
+    || bad "updateWorkflowFromRun unexpected: $patch_code"
 fi
+
+run_ver_code=$(curl -s -o /dev/null -w "%{http_code}" "$API/api/runs/$RUN_ID/template-versions")
+[[ "$run_ver_code" == "404" ]] \
+  && ok "run template-versions removed (404)" \
+  || bad "run template-versions unexpected: $run_ver_code"
 
 # --- Refine (optional — may be slow) ---
 echo ""

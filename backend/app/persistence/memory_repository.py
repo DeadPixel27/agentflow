@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from app.models.domain.email import InboundAddress
 from app.models.domain.run import RunResult
 from app.models.domain.user import UserRecord
 from app.models.domain.user_template_version import RefinementEvent, UserTemplateVersionRecord
@@ -18,6 +19,7 @@ class MemoryRepository:
         self._workflows: dict[str, WorkflowRecord] = {}
         self._template_versions: dict[str, UserTemplateVersionRecord] = {}
         self._refinement_events: list[RefinementEvent] = []
+        self._inbound_addresses: dict[str, InboundAddress] = {}
 
     def health_check(self) -> tuple[bool, str]:
         return True, "in_memory"
@@ -98,3 +100,19 @@ class MemoryRepository:
         if template_id is not None:
             events = [event for event in events if event.template_id == template_id]
         return sorted(events, key=lambda event: event.created_at or "", reverse=True)[:limit]
+
+    def save_inbound_address(self, address: InboundAddress) -> None:
+        self._inbound_addresses[address.address_id] = address
+
+    def get_inbound_address(self, address_id: str) -> Optional[InboundAddress]:
+        return self._inbound_addresses.get(address_id)
+
+    def list_inbound_addresses(self, user_id: str) -> list[InboundAddress]:
+        return [
+            address
+            for address in self._inbound_addresses.values()
+            if address.user_id == user_id
+        ]
+
+    def delete_inbound_address(self, address_id: str) -> None:
+        self._inbound_addresses.pop(address_id, None)

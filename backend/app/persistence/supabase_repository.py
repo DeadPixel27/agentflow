@@ -7,6 +7,7 @@ from typing import Optional
 from supabase import Client, create_client
 
 from app.config import settings
+from app.models.domain.email import InboundAddress
 from app.models.domain.pipeline import PlannedStep
 from app.models.domain.run import RunResult, StepRunRecord
 from app.models.domain.user import UserRecord
@@ -77,12 +78,12 @@ class SupabaseRepository:
             .eq("email", normalized)
             .order("created_at", desc=True)
             .limit(1)
-            .maybe_single()
             .execute()
         )
-        if not resp.data:
+        rows = resp.data or []
+        if not rows:
             return None
-        row = resp.data
+        row = rows[0]
         return UserRecord(
             user_id=row["id"],
             name=row["name"],
@@ -223,6 +224,8 @@ class SupabaseRepository:
                 "parent_template_id": persist_workflow.parent_template_id,
                 "current_template_version_id": persist_workflow.current_template_version_id,
                 "extraction_prompt": persist_workflow.extraction_prompt,
+                "default_email": persist_workflow.default_email,
+                "default_sheets_url": persist_workflow.default_sheets_url,
             }
         ).execute()
 
@@ -285,6 +288,8 @@ class SupabaseRepository:
             extraction_prompt=row.get("extraction_prompt"),
             steps=steps,
             created_at=row.get("created_at"),
+            default_email=row.get("default_email"),
+            default_sheets_url=row.get("default_sheets_url"),
         )
 
     def list_workflows(self, user_id: Optional[str] = None) -> list[WorkflowSummary]:
@@ -381,6 +386,56 @@ class SupabaseRepository:
             query = query.eq("template_id", template_id)
         resp = query.execute()
         return [_refinement_event_from_row(row) for row in resp.data or []]
+
+    def save_inbound_address(self, address: InboundAddress) -> None:
+        _get_client().table("inbound_addresses").upsert(
+            {
+                "address_id": address.address_id,
+                "full_address": address.full_address,
+                "user_id": address.user_id,
+                "workflow_id": address.workflow_id,
+            }
+        ).execute()
+
+    def get_inbound_address(self, address_id: str) -> Optional[InboundAddress]:
+        resp = (
+            _get_client()
+            .table("inbound_addresses")
+            .select("*")
+            .eq("address_id", address_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+        return _inbound_address_from_row(rows[0])
+
+    def list_inbound_addresses(self, user_id: str) -> list[InboundAddress]:
+        resp = (
+            _get_client()
+            .table("inbound_addresses")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [_inbound_address_from_row(row) for row in resp.data or []]
+
+    def delete_inbound_address(self, address_id: str) -> None:
+        _get_client().table("inbound_addresses").delete().eq(
+            "address_id", address_id
+        ).execute()
+
+
+def _inbound_address_from_row(row: dict) -> InboundAddress:
+    return InboundAddress(
+        address_id=row["address_id"],
+        full_address=row["full_address"],
+        user_id=row["user_id"],
+        workflow_id=row["workflow_id"],
+        created_at=row.get("created_at"),
+    )
 
 
 def _template_version_from_row(row: dict) -> UserTemplateVersionRecord:

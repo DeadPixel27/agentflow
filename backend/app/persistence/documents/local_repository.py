@@ -86,3 +86,29 @@ class LocalDocumentRepository:
     async def read_bytes(self, upload_id: str, document_id: str) -> bytes:
         path = self._find_document_path(upload_id, document_id)
         return path.read_bytes()
+
+    async def save_document_bytes(
+        self,
+        upload_id: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> StoredDocument:
+        document_id = str(uuid.uuid4())
+        ext = Path(filename).suffix.lower()
+        if not ext:
+            ext = ".pdf"
+        upload_folder = self._upload_dir(upload_id)
+        upload_folder.mkdir(parents=True, exist_ok=True)
+
+        dest_path = upload_folder / f"{document_id}{ext}"
+        validate_file_content(content, ext)
+
+        dest_path.write_bytes(content)
+        storage_key = f"{upload_id}/{document_id}{ext}"
+        return StoredDocument(
+            document_id=document_id,
+            filename=dest_path.name,
+            file_type=ext,
+            storage_key=storage_key,
+        )

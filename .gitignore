@@ -31,3 +31,4 @@ docs copy/
 docs/_archive/source-screenshots/**
 !docs/_archive/source-screenshots/README.md
 frontend-v2-opus4.6/
+backend-v2-opus4.6/

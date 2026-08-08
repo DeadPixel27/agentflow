@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     # Auth: email = lookup by email (no password); supabase = future Supabase Auth
     auth_backend: str = "email"
 
+    # Email delivery (Resend)
+    resend_api_key: str = ""
+    resend_from_email: str = "onboarding@resend.dev"
+
+    # Google Sheets (service account JSON path or raw JSON string)
+    google_service_account_json: str = ""
+
+    # Inbound email (Mailgun webhook)
+    inbound_email_domain: str = "ingest.agentflow.app"
+    inbound_webhook_secret: str = ""
+
     # Comma-separated origins for CORS (e.g. http://localhost:3000,https://app.vercel.app)
     cors_origins: str = "http://localhost:3000"
 

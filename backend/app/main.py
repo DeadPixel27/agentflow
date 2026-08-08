@@ -25,7 +25,24 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 import app.agents.handlers  # noqa: F401 — register all agents on startup
-from app.api.routes import admin, auth, extract, health, pipeline, runs, template_versions, templates, upload, uploads, users, workflows
+from app.api.routes import (
+    admin,
+    auth,
+    email,
+    extract,
+    health,
+    inbound,
+    inbound_addresses,
+    pipeline,
+    runs,
+    sheets,
+    template_versions,
+    templates,
+    upload,
+    uploads,
+    users,
+    workflows,
+)
 from app.config import settings
 from app.logging_config import setup_logging
 from app.persistence.templates.bootstrap import ensure_pipeline_templates_seeded
@@ -69,6 +86,10 @@ app.include_router(uploads.router)
 app.include_router(extract.router)
 app.include_router(pipeline.router)
 app.include_router(runs.router)
+app.include_router(email.router)
+app.include_router(sheets.router)
+app.include_router(inbound.router)
+app.include_router(inbound_addresses.router)
 app.include_router(template_versions.router)
 app.include_router(templates.router)
 app.include_router(workflows.router)

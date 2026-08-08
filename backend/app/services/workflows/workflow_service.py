@@ -212,3 +212,73 @@ class WorkflowService:
             steps, prompt = self._versions.resolve_workflow_plan(workflow)
             return steps, prompt, workflow.current_template_version_id
         return workflow.steps, workflow.extraction_prompt or "", workflow.current_template_version_id
+
+    def update_from_run(
+        self,
+        workflow_id: str,
+        run_id: str,
+        *,
+        version_name: str = "",
+        description: str = "",
+    ) -> WorkflowRecord:
+        """Update a workflow from a refined run — creates a new version."""
+        workflow = self._repo.get_workflow(workflow_id)
+        if workflow is None:
+            raise WorkflowNotFoundError(f"Workflow not found: {workflow_id}")
+
+        run = self._repo.get_run(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+        if run.status not in ("completed", "failed"):
+            raise ValueError("Cannot update from a run that is still in progress")
+
+        if self._versions is None:
+            raise ValueError("Version service not configured")
+
+        planned_steps, prompt = self._versions.resolve_run_plan(run)
+        template_id = run.template_id or workflow.parent_template_id or "custom"
+        summary = version_name.strip() or "Updated from run"
+
+        wf_version = self._versions.create_workflow_version(
+            scope_id=workflow_id,
+            template_id=template_id,
+            planned_steps=planned_steps,
+            extraction_prompt=prompt,
+            refine_summary=summary,
+            parent_version_id=workflow.current_template_version_id,
+            user_message=description,
+        )
+
+        workflow.current_template_version_id = wf_version.version_id
+        workflow.extraction_prompt = prompt
+        workflow.steps = planned_steps
+        self._repo.save_workflow(workflow)
+        return self._versions.hydrate_workflow(workflow)
+
+    def update_settings(
+        self,
+        workflow_id: str,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        default_email: Optional[str] = None,
+        default_sheets_url: Optional[str] = None,
+    ) -> WorkflowRecord:
+        """Update workflow metadata and delivery defaults."""
+        workflow = self._repo.get_workflow(workflow_id)
+        if workflow is None:
+            raise WorkflowNotFoundError(f"Workflow not found: {workflow_id}")
+
+        if name is not None:
+            workflow.name = name.strip()
+        if description is not None:
+            workflow.description = description.strip()
+        if default_email is not None:
+            workflow.default_email = default_email.strip() or None
+        if default_sheets_url is not None:
+            workflow.default_sheets_url = default_sheets_url.strip() or None
+
+        self._repo.save_workflow(workflow)
+        if self._versions is not None:
+            return self._versions.hydrate_workflow(workflow)
+        return workflow

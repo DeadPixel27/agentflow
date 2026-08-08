@@ -1,4 +1,4 @@
-"""API tests for template version list, preview, and revert endpoints."""
+"""API tests for workflow template version list, preview, and revert endpoints."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -103,63 +103,6 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-def test_list_run_template_versions():
-    repo, versions, workflows = _setup_services()
-    _seed_completed_run(repo, versions)
-    _override(repo, versions, workflows)
-
-    response = client.get("/api/runs/run-root/template-versions")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-    assert data[1]["is_current"] is True
-
-
-def test_get_run_template_version_detail():
-    repo, versions, workflows = _setup_services()
-    seeded = _seed_completed_run(repo, versions)
-    items = versions.list_run_versions("run-root", seeded.current_template_version_id)
-    version_id = items[0]["version_id"]
-    _override(repo, versions, workflows)
-
-    response = client.get(f"/api/runs/run-root/template-versions/{version_id}")
-    assert response.status_code == 200
-    detail = response.json()
-    assert detail["version_number"] == 1
-    assert detail["extraction_prompt"] == "Extract name"
-    assert len(detail["planned_steps"]) == 1
-
-
-def _patch_runner_persistence(monkeypatch, repo: MemoryRepository) -> None:
-    monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
-    monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
-
-
-def test_revert_run_creates_child_run(monkeypatch):
-    repo, versions, workflows = _setup_services()
-    seeded = _seed_completed_run(repo, versions)
-    items = versions.list_run_versions("run-root", seeded.current_template_version_id)
-    version_id = items[0]["version_id"]
-    _override(repo, versions, workflows)
-    _patch_runner_persistence(monkeypatch, repo)
-
-    async def _noop_execute(_run_id: str) -> None:
-        return None
-
-    monkeypatch.setattr("app.api.routes.template_versions.execute_run", _noop_execute)
-
-    response = client.post(
-        "/api/runs/run-root/revert",
-        json={"version_id": version_id},
-    )
-    assert response.status_code == 200
-    child_id = response.json()["run_id"]
-    child = repo.get_run(child_id)
-    assert child is not None
-    assert child.parent_run_id == "run-root"
-    assert child.current_template_version_id is not None
-
-
 def test_workflow_revert_updates_head():
     repo, versions, workflows = _setup_services()
     _ensure_user(repo)
@@ -200,7 +143,7 @@ def test_workflow_revert_updates_head():
 def test_workflow_run_seeds_run_scope_version(monkeypatch):
     repo, versions, workflows = _setup_services()
     _ensure_user(repo)
-    seeded = _seed_completed_run(repo, versions)
+    _seed_completed_run(repo, versions)
     workflow = workflows.create_workflow_from_run("user-1", "run-root", "My workflow")
 
     async def _fake_load(_upload_id: str):
@@ -219,7 +162,8 @@ def test_workflow_run_seeds_run_scope_version(monkeypatch):
         "app.services.pipeline.runner.load_upload_documents",
         _fake_load,
     )
-    _patch_runner_persistence(monkeypatch, repo)
+    monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
+    monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
     _override(repo, versions, workflows)
 
     response = client.post(

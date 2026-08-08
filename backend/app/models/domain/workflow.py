@@ -19,6 +19,8 @@ class WorkflowRecord:
     current_template_version_id: Optional[str] = None
     extraction_prompt: Optional[str] = None
     created_at: Optional[str] = None
+    default_email: Optional[str] = None
+    default_sheets_url: Optional[str] = None
 
 
 @dataclass

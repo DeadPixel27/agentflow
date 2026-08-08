@@ -15,8 +15,10 @@ from app.models.api.workflows import (
     WorkflowFromRunRequest,
     WorkflowResponse,
     WorkflowRunRequest,
+    WorkflowSettingsUpdateRequest,
     WorkflowStepResponse,
     WorkflowSummaryResponse,
+    WorkflowUpdateFromRunRequest,
 )
 from app.services.documents.upload_loader import UploadNotFoundError
 from app.services.pipeline.runner import execute_run
@@ -48,6 +50,8 @@ def _to_workflow_response(workflow, *, current_version_number: Optional[int] = N
             for step in workflow.steps
         ],
         created_at=workflow.created_at,
+        default_email=workflow.default_email,
+        default_sheets_url=workflow.default_sheets_url,
     )
 
 
@@ -178,3 +182,55 @@ async def run_saved_workflow(
 
     background_tasks.add_task(execute_run, run.run_id)
     return to_run_response(run)
+
+
+@router.patch("/{workflow_id}", response_model=WorkflowResponse)
+async def update_workflow_from_run(
+    workflow_id: str,
+    body: WorkflowUpdateFromRunRequest,
+    workflows: WorkflowServiceDep,
+) -> WorkflowResponse:
+    """Update a workflow's template from a refined run (creates a new version)."""
+    try:
+        workflow = workflows.update_from_run(
+            workflow_id,
+            body.run_id,
+            version_name=body.version_name,
+            description=body.description,
+        )
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RunNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return _to_workflow_response(
+        workflow,
+        current_version_number=workflows.current_version_number(workflow),
+    )
+
+
+@router.patch("/{workflow_id}/settings", response_model=WorkflowResponse)
+@router.put("/{workflow_id}/settings", response_model=WorkflowResponse)
+async def update_workflow_settings(
+    workflow_id: str,
+    body: WorkflowSettingsUpdateRequest,
+    workflows: WorkflowServiceDep,
+) -> WorkflowResponse:
+    """Update workflow metadata and delivery defaults."""
+    try:
+        workflow = workflows.update_settings(
+            workflow_id,
+            name=body.name,
+            description=body.description,
+            default_email=body.default_email,
+            default_sheets_url=body.default_sheets_url,
+        )
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    return _to_workflow_response(
+        workflow,
+        current_version_number=workflows.current_version_number(workflow),
+    )

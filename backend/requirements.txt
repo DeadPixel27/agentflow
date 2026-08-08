@@ -33,6 +33,13 @@ filetype==1.2.0
 # LLM retry
 tenacity==9.0.0
 
+# Email delivery
+resend>=2.0.0
+
+# Google Sheets
+google-api-python-client>=2.100.0
+google-auth>=2.20.0
+
 # Tests
 pytest==8.3.4
 pytest-asyncio==0.25.2
