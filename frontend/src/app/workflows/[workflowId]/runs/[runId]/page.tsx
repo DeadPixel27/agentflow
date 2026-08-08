@@ -7,13 +7,16 @@ import { useEffect, useState } from "react";
 
 import { ResultsLayout } from "@/components/results/results-layout";
 import { useRunPolling } from "@/hooks/use-run-polling";
+import { getWorkflow, type WorkflowResponse } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 
-export default function ResultsPage() {
+export default function WorkflowRunResultsPage() {
   const router = useRouter();
   const params = useParams();
+  const workflowId = params.workflowId as string;
   const runId = params.runId as string;
-  const [savedWorkflowId, setSavedWorkflowId] = useState<string | null>(null);
+
+  const [workflow, setWorkflow] = useState<WorkflowResponse | null>(null);
 
   const { run, loading, error, isRunning } = useRunPolling(runId, {
     onComplete: (data) => {
@@ -27,8 +30,17 @@ export default function ResultsPage() {
   });
 
   useEffect(() => {
-    if (run?.workflow_id) setSavedWorkflowId(run.workflow_id);
-  }, [run?.workflow_id]);
+    getWorkflow(workflowId)
+      .then(setWorkflow)
+      .catch(() => {
+        /* optional */
+      });
+  }, [workflowId]);
+
+  const versionLabel =
+    workflow?.current_version_number != null
+      ? `v${workflow.current_version_number}`
+      : undefined;
 
   if (loading && !run) {
     return (
@@ -41,9 +53,7 @@ export default function ResultsPage() {
   if (error && !run) {
     return (
       <div className="v2-page items-center justify-center p-4">
-        <p className="text-destructive" role="alert">
-          {error}
-        </p>
+        <p className="text-destructive">{error}</p>
       </div>
     );
   }
@@ -54,12 +64,15 @@ export default function ResultsPage() {
     <ResultsLayout
       run={run}
       isRunning={isRunning}
-      backHref="/"
-      backLabel="New run"
-      saveAction={savedWorkflowId ? "none" : "workflow"}
-      workflowId={savedWorkflowId ?? undefined}
-      onRefined={(newRunId) => router.push(`/results/${newRunId}`)}
-      onWorkflowSaved={(id) => setSavedWorkflowId(id)}
+      backHref={`/workflows/${workflowId}`}
+      backLabel="Back to workflow"
+      title={workflow?.name ?? "Workflow Results"}
+      saveAction="version"
+      workflowId={workflowId}
+      versionLabel={versionLabel}
+      onRefined={(newRunId) =>
+        router.push(`/workflows/${workflowId}/runs/${newRunId}`)
+      }
     />
   );
 }

@@ -1,22 +1,15 @@
 "use client";
 
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
-import { RerunPanel } from "@/components/rerun-panel";
-import { TemplateVersionPanel } from "@/components/template-version-panel";
-import { WorkflowRunList } from "@/components/workflow-run-list";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { NavBar } from "@/components/nav-bar";
+import { DetailLayout } from "@/components/workflow/detail-layout";
+import { DetailSidebar } from "@/components/workflow/detail-sidebar";
+import { RerunZone } from "@/components/workflow/rerun-zone";
+import { RunHistory } from "@/components/workflow/run-history";
 import {
   ApiError,
   getWorkflow,
@@ -52,103 +45,77 @@ export default function WorkflowDetailPage() {
   }, [workflowId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
+  if (loading && !workflow) {
+    return (
+      <div className="v2-page items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !workflow) {
+    return (
+      <div className="v2-page">
+        <NavBar />
+        <main className="p-6">
+          <p className="text-destructive">{error ?? "Workflow not found."}</p>
+          <Link href="/workflows" className="text-sm text-primary hover:underline mt-2 inline-block">
+            Back to workflows
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  const versionLabel =
+    workflow.current_version_number != null
+      ? `v${workflow.current_version_number}`
+      : undefined;
+
   return (
-    <div className="min-h-screen bg-muted/30">
-      <AppHeader />
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
-        <Link
-          href="/workflows"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          All workflows
-        </Link>
-
-        {loading && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading workflow…
-          </div>
-        )}
-
-        {error && (
-          <p className="text-destructive" role="alert">
-            {error}
-          </p>
-        )}
-
-        {workflow && (
-          <>
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold">{workflow.name}</h1>
-                <Badge variant="secondary">{workflow.steps.length} steps</Badge>
-                {workflow.current_version_number != null && (
-                  <Badge variant="default">Using v{workflow.current_version_number}</Badge>
-                )}
-                <Badge variant="outline">{workflow.source}</Badge>
-              </div>
-              {workflow.description && (
-                <p className="text-muted-foreground">{workflow.description}</p>
+    <DetailLayout
+      header={
+        <>
+          <NavBar />
+          <div className="shrink-0 border-b border-border px-4 sm:px-6 py-5">
+            <Link
+              href="/workflows"
+              className="text-xs text-muted-foreground hover:text-foreground mb-2 inline-block"
+            >
+              ← All workflows
+            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-serif text-lg font-semibold">{workflow.name}</h1>
+              <span className="v2-badge-success">Active</span>
+              {versionLabel && (
+                <span className="v2-badge-success">{versionLabel}</span>
               )}
-              <p className="text-sm text-muted-foreground">
-                {workflow.task_description}
-              </p>
             </div>
-
-            <TemplateVersionPanel
-              scopeType="workflow"
-              scopeId={workflowId}
-              currentVersionId={workflow.current_template_version_id}
-              onWorkflowUpdated={load}
-            />
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <RerunPanel
-                workflowId={workflow.workflow_id}
-                workflowName={workflow.name}
-              />
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Pipeline steps</CardTitle>
-                  <CardDescription>Saved plan (planner skipped on rerun)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {workflow.steps.map((step) => (
-                    <div
-                      key={step.step_order}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <p className="font-medium">
-                        {step.step_order}. {step.agent_type}
-                      </p>
-                      <p className="text-muted-foreground text-xs mt-1">
-                        {step.reason}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Run history</CardTitle>
-                <CardDescription>
-                  {runs.length} run(s) for this workflow
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <WorkflowRunList runs={runs} />
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </main>
-    </div>
+            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+              {workflow.description || workflow.task_description}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {runs.length} runs · {workflow.steps.length} steps
+            </p>
+          </div>
+        </>
+      }
+      main={
+        <>
+          <RerunZone
+            workflowId={workflow.workflow_id}
+            workflowName={workflow.name}
+            versionLabel={versionLabel}
+          />
+          <RunHistory workflowId={workflow.workflow_id} runs={runs} />
+        </>
+      }
+      sidebar={
+        <DetailSidebar workflow={workflow} onWorkflowUpdated={load} />
+      }
+    />
   );
 }

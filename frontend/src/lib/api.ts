@@ -372,6 +372,64 @@ export async function saveWorkflowFromRun(
   });
 }
 
+export interface WorkflowSettingsUpdate {
+  name?: string;
+  description?: string;
+  email_recipient?: string;
+  sheets_url?: string;
+  sheet_name?: string;
+}
+
+export async function updateWorkflowSettings(
+  workflowId: string,
+  data: WorkflowSettingsUpdate,
+): Promise<WorkflowResponse> {
+  return request<WorkflowResponse>(`/api/workflows/${workflowId}/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateWorkflowFromRun(
+  workflowId: string,
+  runId: string,
+  versionName?: string,
+): Promise<WorkflowResponse> {
+  return request<WorkflowResponse>(`/api/workflows/${workflowId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from_run_id: runId,
+      version_name: versionName,
+    }),
+  });
+}
+
+export async function emailResults(
+  runId: string,
+  to: string,
+  subject: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/runs/${runId}/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, subject }),
+  });
+}
+
+export async function pushToSheets(
+  runId: string,
+  url: string,
+  sheetName: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/runs/${runId}/sheets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, sheet_name: sheetName }),
+  });
+}
+
 export function downloadJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",

@@ -4,33 +4,94 @@
 
 @layer base {
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0 0);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --background: 40 33% 98%;
+    --foreground: 24 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 10%;
+    --primary: 175 83% 29%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 11% 96%;
+    --secondary-foreground: 24 10% 10%;
+    --muted: 30 11% 96%;
+    --muted-foreground: 25 6% 45%;
+    --accent: 30 11% 96%;
+    --accent-foreground: 24 10% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 7% 90%;
+    --input: 30 7% 90%;
+    --ring: 175 83% 29%;
     --radius: 0.625rem;
+
+    --surface: 0 0% 100%;
+    --surface-hover: 30 15% 94%;
+    --surface-2: 30 11% 93%;
+    --fg-soft: 24 8% 15%;
+    --muted-2: 25 5% 64%;
+    --border-s: 25 6% 83%;
+    --primary-hover: 175 80% 24%;
+    --primary-soft: 166 76% 90%;
+    --primary-softer: 166 76% 97%;
+    --success: 142 72% 29%;
+    --success-soft: 138 76% 93%;
+    --warning: 32 95% 29%;
+    --warning-soft: 48 96% 89%;
+    --blue: 217 91% 60%;
+    --blue-soft: 214 95% 93%;
+    --purple: 262 83% 58%;
+    --purple-soft: 270 95% 95%;
   }
 
   * {
     @apply border-border;
   }
 
+  html,
   body {
-    @apply bg-background text-foreground;
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  }
+
+  .font-serif {
+    font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  }
+}
+
+@layer utilities {
+  .v2-page {
+    @apply flex h-screen flex-col overflow-hidden bg-background;
+  }
+
+  .v2-badge-success {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold;
+    background: hsl(var(--success-soft));
+    color: hsl(var(--success));
+  }
+
+  .v2-badge-muted {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-muted text-muted-foreground;
+  }
+
+  .v2-badge-blue {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold;
+    background: hsl(var(--blue-soft));
+    color: hsl(var(--blue));
+  }
+
+  .v2-section-title {
+    @apply text-[11px] font-bold uppercase tracking-wider text-muted-foreground;
+  }
+
+  .pdf-highlight {
+    background: hsl(var(--primary) / 0.15);
+    border: 1px solid hsl(var(--primary) / 0.35);
+    border-radius: 2px;
+    padding: 0 2px;
   }
 }

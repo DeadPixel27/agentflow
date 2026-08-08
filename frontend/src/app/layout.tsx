@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Source_Serif_4 } from "next/font/google";
 import { Toaster } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -9,6 +9,12 @@ import "./globals.css";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
+});
+
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  weight: ["400", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -24,7 +30,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={cn("min-h-screen font-sans antialiased", inter.variable)}>
+      <body
+        className={cn(
+          "min-h-screen font-sans antialiased",
+          inter.variable,
+          sourceSerif.variable,
+        )}
+      >
         {children}
         <Toaster richColors position="top-right" closeButton />
       </body>
