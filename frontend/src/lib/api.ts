@@ -174,6 +174,8 @@ export interface WorkflowResponse {
   extraction_prompt?: string | null;
   steps: WorkflowStep[];
   created_at: string | null;
+  default_email?: string | null;
+  default_sheets_url?: string | null;
 }
 
 export interface HealthResponse {
@@ -302,32 +304,6 @@ export async function getRun(runId: string): Promise<RunResponse> {
   return request<RunResponse>(`/api/runs/${runId}`);
 }
 
-export async function getRunTemplateVersions(
-  runId: string,
-): Promise<TemplateVersionSummary[]> {
-  return request<TemplateVersionSummary[]>(`/api/runs/${runId}/template-versions`);
-}
-
-export async function getRunTemplateVersion(
-  runId: string,
-  versionId: string,
-): Promise<TemplateVersionDetail> {
-  return request<TemplateVersionDetail>(
-    `/api/runs/${runId}/template-versions/${versionId}`,
-  );
-}
-
-export async function revertRunToVersion(
-  runId: string,
-  versionId: string,
-): Promise<{ run_id: string }> {
-  return request<{ run_id: string }>(`/api/runs/${runId}/revert`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ version_id: versionId }),
-  });
-}
-
 export async function getWorkflowTemplateVersions(
   workflowId: string,
 ): Promise<TemplateVersionSummary[]> {
@@ -375,9 +351,8 @@ export async function saveWorkflowFromRun(
 export interface WorkflowSettingsUpdate {
   name?: string;
   description?: string;
-  email_recipient?: string;
-  sheets_url?: string;
-  sheet_name?: string;
+  default_email?: string;
+  default_sheets_url?: string;
 }
 
 export async function updateWorkflowSettings(

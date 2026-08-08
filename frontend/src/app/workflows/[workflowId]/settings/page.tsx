@@ -70,6 +70,8 @@ export default function WorkflowSettingsPage() {
       setVersions(vers);
       setName(wf.name);
       setDescription(wf.description);
+      setEmailRecipient(wf.default_email ?? "");
+      setSheetsUrl(wf.default_sheets_url ?? "");
     } catch (e) {
       toastError(e instanceof ApiError ? e.message : "Failed to load settings.");
     } finally {
@@ -98,9 +100,8 @@ export default function WorkflowSettingsPage() {
     setSaving(true);
     try {
       await updateWorkflowSettings(workflowId, {
-        email_recipient: emailRecipient,
-        sheets_url: sheetsUrl,
-        sheet_name: sheetName,
+        default_email: emailRecipient,
+        default_sheets_url: sheetsUrl,
       });
       toastSuccess("Delivery settings updated.");
     } catch (e) {
