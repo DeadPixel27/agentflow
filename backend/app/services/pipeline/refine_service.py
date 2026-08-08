@@ -52,6 +52,19 @@ class RefineService:
 
         planned_steps, base_prompt = self._versions.resolve_run_plan(parent)
 
+        refinement_history: list[str] = []
+        current = parent
+        seen_ids: set[str] = set()
+        while current and current.parent_run_id and len(refinement_history) < 5:
+            if current.run_id in seen_ids:
+                break
+            seen_ids.add(current.run_id)
+            if current.refine_summary:
+                refinement_history.append(current.refine_summary)
+            prev = self._repo.get_run(current.parent_run_id)
+            current = prev
+        refinement_history.reverse()
+
         ctx = WorkflowContext(
             upload_id=parent.upload_id,
             task_description=message,
@@ -59,6 +72,7 @@ class RefineService:
                 "current_steps": planned_steps,
                 "sample_results": sample_rows,
                 "extraction_prompt": base_prompt,
+                "previous_refinements": refinement_history,
             },
         )
 

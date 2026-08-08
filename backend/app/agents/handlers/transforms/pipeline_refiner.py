@@ -38,12 +38,14 @@ class PipelineRefinerHandler(StepHandler):
             raise ValueError(f"{_AGENT_TYPE} requires a refinement message")
 
         base_prompt = str(ctx.data.get("extraction_prompt") or "")
+        previous_refinements = ctx.data.get("previous_refinements", [])
         try:
             steps, summary, extraction_prompt = await refine_pipeline(
                 current_steps,
                 sample_results,
                 message,
                 base_prompt=base_prompt,
+                previous_refinements=previous_refinements,
             )
         except RefinerError as exc:
             raise ValueError(str(exc)) from exc
