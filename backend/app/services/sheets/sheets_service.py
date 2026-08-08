@@ -36,6 +36,14 @@ def _extract_sheet_id(url_or_id: str) -> str:
     return url_or_id
 
 
+def _a1_range(sheet_name: str, cell: str = "A1") -> str:
+    """Build an A1 range, quoting sheet names that contain spaces or quotes."""
+    if " " in sheet_name or "'" in sheet_name or "!" in sheet_name:
+        escaped = sheet_name.replace("'", "''")
+        return f"'{escaped}'!{cell}"
+    return f"{sheet_name}!{cell}"
+
+
 async def push_rows_to_sheet(
     spreadsheet_url: str,
     rows: list[dict[str, Any]],
@@ -82,7 +90,7 @@ async def push_rows_to_sheet(
 
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A1",
+            range=_a1_range(sheet_name),
             valueInputOption="USER_ENTERED",
             body={"values": values},
         ).execute()

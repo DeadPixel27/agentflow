@@ -17,6 +17,8 @@ create table if not exists workflows (
     parent_template_id text,
     current_template_version_id uuid,
     extraction_prompt text,
+    default_email text,
+    default_sheets_url text,
     created_at timestamptz not null default now()
 );
 
@@ -120,3 +122,15 @@ create table if not exists refinement_events (
 
 create index if not exists idx_refinement_events_template
     on refinement_events(template_id, created_at desc);
+
+-- V2: inbound email forwarding addresses (one per workflow)
+create table if not exists inbound_addresses (
+    address_id text primary key,
+    full_address text not null unique,
+    user_id uuid not null references users(id) on delete cascade,
+    workflow_id uuid not null references workflows(id) on delete cascade,
+    created_at timestamptz default now()
+);
+
+create index if not exists idx_inbound_addresses_user_id
+    on inbound_addresses(user_id);
