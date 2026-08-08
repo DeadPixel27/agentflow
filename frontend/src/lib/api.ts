@@ -128,6 +128,20 @@ export interface RunRefineResponse {
   refine_summary: string;
 }
 
+// --- Plan Mode types ---
+
+export interface RefinePlanMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface RefinePlanResponse {
+  ready: boolean;
+  message: string;
+  planned_changes: string[];
+  accumulated_instruction: string;
+}
+
 export interface TemplateVersionSummary {
   version_id: string;
   version_number: number;
@@ -297,6 +311,21 @@ export async function refineRun(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
+  });
+}
+
+export async function refinePlan(
+  runId: string,
+  message: string,
+  chatHistory: RefinePlanMessage[],
+): Promise<RefinePlanResponse> {
+  return request<RefinePlanResponse>(`/api/runs/${runId}/refine/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      chat_history: chatHistory,
+    }),
   });
 }
 

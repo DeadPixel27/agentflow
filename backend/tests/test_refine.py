@@ -170,3 +170,48 @@ def test_refine_run_rejects_running_parent():
         assert response.status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_refine_plan_endpoint(monkeypatch):
+    repo = MemoryRepository()
+    repo.save_run(_completed_run())
+
+    async def _fake_plan(**kwargs):
+        return {
+            "ready": False,
+            "message": "I'll normalize dates to YYYY-MM-DD. Confirm?",
+            "planned_changes": ["Normalize dates to YYYY-MM-DD"],
+            "accumulated_instruction": "",
+        }
+
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_chat.plan_refinement",
+        _fake_plan,
+    )
+
+    app.dependency_overrides[get_repo] = lambda: repo
+    try:
+        response = client.post(
+            "/api/runs/run-parent/refine/plan",
+            json={"message": "fix the dates", "chat_history": []},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ready"] is False
+        assert "dates" in body["message"].lower()
+        assert body["planned_changes"] == ["Normalize dates to YYYY-MM-DD"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_refine_plan_not_found():
+    repo = MemoryRepository()
+    app.dependency_overrides[get_repo] = lambda: repo
+    try:
+        response = client.post(
+            "/api/runs/missing/refine/plan",
+            json={"message": "fix dates"},
+        )
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()

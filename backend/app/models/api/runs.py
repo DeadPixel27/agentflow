@@ -27,6 +27,27 @@ class RunRefineRequest(BaseModel):
     message: str = Field(min_length=1)
 
 
+class RefineChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class RefinePlanRequest(BaseModel):
+    """Plan mode: clarify user intent before expensive re-run."""
+
+    message: str = Field(min_length=1)
+    chat_history: list[RefineChatMessage] = Field(default_factory=list)
+
+
+class RefinePlanResponse(BaseModel):
+    """Response from plan mode clarification."""
+
+    ready: bool  # true = user can click Apply
+    message: str  # assistant response to show in chat
+    planned_changes: list[str] = Field(default_factory=list)
+    accumulated_instruction: str = ""  # full instruction to send to /refine when ready
+
+
 class RunAdhocRequest(BaseModel):
     upload_id: str
     task_description: str = Field(min_length=1)

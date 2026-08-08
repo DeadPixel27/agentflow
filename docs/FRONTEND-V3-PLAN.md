@@ -1,3 +1,109 @@
+# Frontend V3 — Plan Mode Refinement Chat
+
+> **What this is:** One-shot Cursor prompt. Add Plan Mode to the refine chat panel.
+> All changes in `frontend/`. ~2-3 hours total.
+>
+> **How to use:** Paste from START to END into Cursor.
+
+---
+
+## --- START PROMPT ---
+
+You are adding Plan Mode to the AgentFlow refinement chat. Codebase: `github.com/kabirrao2002/agentflow`, branch `develop`, working in `frontend/`.
+
+### Stack
+
+- Next.js 14 (App Router), TypeScript, Tailwind CSS 3.4, shadcn/ui, Lucide React icons
+
+### Problem
+
+Currently, every chat message in the refine panel immediately triggers:
+
+1. Expensive refiner LLM call (70b model + full pipeline context)
+2. Full re-extraction of ALL documents
+
+If the user's request is vague ("fix the dates"), the refiner guesses wrong, user sends another message, another expensive re-run. 3 messages = 3 full re-extractions.
+
+### Solution — Plan Mode
+
+Add a cheap clarification layer before the expensive re-run:
+
+1. User types message → hits NEW `POST /api/runs/{id}/refine/plan` endpoint (cheap 8b model)
+2. Agent responds with what it understood + planned changes
+3. User can chat more (still cheap) or click **[Apply]** to trigger the real re-run
+4. Apply calls the EXISTING `POST /api/runs/{id}/refine` with the accumulated instruction
+
+### New Backend Endpoint (already built in Backend V3)
+
+```
+POST /api/runs/{run_id}/refine/plan
+Body: { message: string, chat_history: [{role, content}] }
+Response: {
+  ready: boolean,           // true = Apply button should appear
+  message: string,          // assistant response to display
+  planned_changes: string[], // bullet list of changes
+  accumulated_instruction: string // send this to /refine when applying
+}
+```
+
+Existing endpoint unchanged:
+
+```
+POST /api/runs/{run_id}/refine
+Body: { message: string }
+Response: { run: RunResponse, refine_summary: string }
+```
+
+---
+
+### TASK 1: Add API Client Function
+
+**File:** `src/lib/api.ts`
+
+Add types and function alongside the existing `refineRun`:
+
+```typescript
+// --- Plan Mode types ---
+
+export interface RefinePlanMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface RefinePlanResponse {
+  ready: boolean;
+  message: string;
+  planned_changes: string[];
+  accumulated_instruction: string;
+}
+
+export async function refinePlan(
+  runId: string,
+  message: string,
+  chatHistory: RefinePlanMessage[],
+): Promise<RefinePlanResponse> {
+  return request<RefinePlanResponse>(`/api/runs/${runId}/refine/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      chat_history: chatHistory,
+    }),
+  });
+}
+```
+
+**Do NOT modify `refineRun()`** — Apply still uses it.
+
+---
+
+### TASK 2: Rewrite `refine-chat.tsx` with Plan Mode
+
+**File:** `src/components/refine-chat.tsx`
+
+Replace the ENTIRE file with:
+
+```tsx
 "use client";
 
 import { Check, Loader2, MessageSquare, Play, Send } from "lucide-react";
@@ -14,8 +120,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   ApiError,
-  refinePlan,
   refineRun,
+  refinePlan,
   type RefinePlanMessage,
 } from "@/lib/api";
 import { toastError } from "@/lib/toast";
@@ -352,3 +458,73 @@ export function RefineChatPanel({
     </Card>
   );
 }
+```
+
+---
+
+### COMPLETE FILE CHANGE SUMMARY
+
+#### New files: none
+
+#### Files to modify:
+
+| # | Path | What changes |
+|---|------|--------------|
+| 1 | `src/lib/api.ts` | Add `RefinePlanMessage`, `RefinePlanResponse` types + `refinePlan()` function |
+| 2 | `src/components/refine-chat.tsx` | Full rewrite — Plan Mode with Send/Apply two-phase flow |
+
+### BUILD ORDER
+
+---
+
+Step 1: Add types + `refinePlan()` to `src/lib/api.ts`
+Step 2: Replace `src/components/refine-chat.tsx` with Plan Mode version
+Step 3: Test: type a message → verify `/refine/plan` is called (not `/refine`)
+Step 4: Test: click Apply → verify `/refine` is called with `accumulated_instruction`
+Step 5: Test: card variant (ad-hoc results) and panel variant (V2 3-column) both work
+
+### CRITICAL RULES
+
+1. **Send button calls `/refine/plan`** (cheap) — **Apply button calls `/refine`** (expensive)
+2. **Apply only appears when `ready: true`** — users can't accidentally trigger expensive re-runs
+3. **Chat history is passed to every `/refine/plan` call** — the 8b model needs conversation context
+4. **`accumulated_instruction` from the plan response is sent as `message` to `/refine`** — the existing refiner sees one clear instruction
+5. **Both `card` and `panel` variants must work** — the card variant is used on the V1 results page, the panel variant on the V2 3-column layout
+6. **The existing `refineRun()` API function stays unchanged** — Plan Mode adds `refinePlan()` alongside it
+
+### UX FLOW
+
+---
+
+```
+User opens results → sees refine panel
+|
+├─ Types "fix the dates" → Send
+│  └─ /refine/plan → cheap 8b model responds:
+│     "I'll normalize dates to YYYY-MM-DD. Currently seeing '03/15/2024'. Confirm?"
+│     planned_changes: ["Normalize dates to YYYY-MM-DD"]
+│     ready: false (ambiguous - might want different format)
+|
+├─ Types "no, DD/MM/YYYY" → Send
+│  └─ /refine/plan → 8b responds:
+│     "Got it. All dates → DD/MM/YYYY. Click Apply to re-run."
+│     planned_changes: ["Normalize dates to DD/MM/YYYY"]
+│     ready: true → [Apply] button appears
+|
+└─ Clicks [Apply]
+   └─ /refine → 70b refiner modifies pipeline → full re-extraction (ONE time)
+      └─ Results update, summary shown: "✓ Updated date format to DD/MM/YYYY"
+```
+
+**Token cost comparison (3-message refinement):**
+
+- Without Plan Mode: 3 × (70b refiner + full re-extraction) = **3× expensive**
+- With Plan Mode: 2 × (8b clarification) + 1 × (70b refiner + re-extraction) = **~1.2× expensive**
+
+## --- END PROMPT ---
+
+---
+
+*Created: 2026-08-08*
+*Covers: Plan Mode refinement chat UI (pairs with Backend V3 Task 10)*
+*Estimated effort: 2-3 hours*

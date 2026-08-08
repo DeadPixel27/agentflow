@@ -10,6 +10,8 @@ from app.api.mappers.run import to_run_response
 from app.config import settings
 from app.models.api.runs import (
     RunAdhocRequest,
+    RefinePlanRequest,
+    RefinePlanResponse,
     RunRefineRequest,
     RunRefineResponse,
     RunRequest,
@@ -121,6 +123,48 @@ async def run_pipeline_steps(
 
     _schedule_run(background_tasks, run.run_id)
     return to_run_response(run)
+
+
+@router.post("/{run_id}/refine/plan", response_model=RefinePlanResponse)
+async def refine_plan(
+    run_id: str,
+    body: RefinePlanRequest,
+    repo: RepoDep,
+) -> RefinePlanResponse:
+    """
+    Plan Mode: clarify user intent with a cheap/fast model before re-running.
+    Call this for each chat message. When response.ready is true,
+    call POST /refine with the accumulated_instruction as the message.
+    """
+    from app.services.pipeline.refine_chat import plan_refinement
+
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+    rows = (run.result or {}).get("rows", [])
+    field_names = list(rows[0].keys()) if rows else []
+    skip = {"document_id", "flags"}
+    field_names = [f for f in field_names if f not in skip]
+
+    chat_history = [{"role": m.role, "content": m.content} for m in body.chat_history]
+
+    try:
+        result = await plan_refinement(
+            message=body.message,
+            chat_history=chat_history,
+            field_names=field_names,
+            sample_rows=rows[:2],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plan mode failed: {e}") from e
+
+    return RefinePlanResponse(
+        ready=result["ready"],
+        message=result["message"],
+        planned_changes=result["planned_changes"],
+        accumulated_instruction=result["accumulated_instruction"],
+    )
 
 
 @router.post("/{run_id}/refine", response_model=RunRefineResponse)
