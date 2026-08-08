@@ -84,6 +84,12 @@
     color: hsl(var(--blue));
   }
 
+  .v2-callout-warning {
+    @apply rounded-md px-3 py-2;
+    background: hsl(var(--warning-soft));
+    color: hsl(var(--warning));
+  }
+
   .v2-section-title {
     @apply text-[11px] font-bold uppercase tracking-wider text-muted-foreground;
   }

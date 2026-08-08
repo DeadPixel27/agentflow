@@ -25,8 +25,70 @@ interface ResultsLayoutProps {
   versionLabel?: string;
   defaultEmail?: string;
   defaultSheetsUrl?: string;
+  refineRunId: string;
+  chatSessionKey: string;
   onRefined: (newRunId: string) => void;
   onWorkflowSaved?: (workflowId: string) => void;
+  onVersionSaved?: () => void;
+}
+
+function RefinePlaceholder({ running }: { running: boolean }) {
+  return (
+    <aside className="w-[340px] shrink-0 flex flex-col border-l border-border bg-card min-h-0">
+      <div className="shrink-0 p-4 border-b border-border space-y-2">
+        <h2 className="font-serif text-base font-semibold">Refine</h2>
+        <p className="text-xs text-muted-foreground">
+          {running
+            ? "Chat refinement unlocks when extraction finishes."
+            : "Describe what to change once results are ready."}
+        </p>
+      </div>
+      <div className="flex-1 flex items-center justify-center p-6 text-center">
+        {running && (
+          <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Pipeline running…</span>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function PipelinePanel({
+  run,
+  isRunning,
+  title = "Pipeline",
+}: {
+  run: RunResponse;
+  isRunning: boolean;
+  title?: string;
+}) {
+  return (
+    <>
+      <div className="shrink-0 flex gap-4 border-b border-border px-4">
+        <span className="pb-2 text-sm font-medium border-b-2 border-primary text-primary -mb-px">
+          {title}
+        </span>
+      </div>
+      <div className="flex-1 overflow-auto p-4 space-y-4 min-h-0">
+        {isRunning && (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Pipeline running…
+          </div>
+        )}
+        <StepStatusList
+          steps={run.steps}
+          plannedSteps={run.planned_steps}
+          showProgress={isRunning}
+        />
+        {run.status === "failed" && run.error_message && (
+          <p className="text-sm text-destructive">{run.error_message}</p>
+        )}
+      </div>
+    </>
+  );
 }
 
 export function ResultsLayout({
@@ -40,23 +102,47 @@ export function ResultsLayout({
   versionLabel,
   defaultEmail,
   defaultSheetsUrl,
+  refineRunId,
+  chatSessionKey,
   onRefined,
   onWorkflowSaved,
+  onVersionSaved,
 }: ResultsLayoutProps) {
   const [activeTab, setActiveTab] = useState<ResultsTab>("results");
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [docNames, setDocNames] = useState<Record<string, string>>({});
+  const [refineUnlocked, setRefineUnlocked] = useState(false);
+  const [lastCompletedRun, setLastCompletedRun] = useState<RunResponse | null>(
+    null,
+  );
 
-  const rows = run.result?.rows ?? [];
+  useEffect(() => {
+    if (run.status === "completed") {
+      setRefineUnlocked(true);
+      setLastCompletedRun(run);
+    }
+  }, [run]);
+
+  const displayRun =
+    run.status === "completed" ? run : (lastCompletedRun ?? run);
+  const rows = displayRun.result?.rows ?? [];
   const flagCount = rows.reduce((count, row) => {
     const flags = row.flags;
     if (Array.isArray(flags)) return count + flags.length;
     return count;
   }, 0);
 
+  const hasCompletedResults =
+    refineUnlocked && displayRun.status === "completed";
+  const showPipelineProgress =
+    isRunning || (!hasCompletedResults && run.status !== "completed");
+  const showRerunBanner = isRunning && hasCompletedResults;
+
+  const uploadId = run.upload_id || displayRun.upload_id;
+
   useEffect(() => {
-    if (!run.upload_id) return;
-    getUploadDocuments(run.upload_id)
+    if (!uploadId) return;
+    getUploadDocuments(uploadId)
       .then((res) => {
         const map: Record<string, string> = {};
         for (const doc of res.documents) {
@@ -70,27 +156,31 @@ export function ResultsLayout({
       .catch(() => {
         /* optional */
       });
-  }, [run.upload_id, selectedDocId]);
+  }, [uploadId, selectedDocId]);
 
+  const docSourceRun = hasCompletedResults ? displayRun : run;
   const files = useMemo(
     () =>
-      run.document_ids.map((id) => ({
+      docSourceRun.document_ids.map((id) => ({
         id,
         name: docNames[id] ?? id.slice(0, 8),
       })),
-    [run.document_ids, docNames],
+    [docSourceRun.document_ids, docNames],
   );
 
-  const statusBadge =
-    run.status === "completed" ? (
-      <span className="v2-badge-success">{run.status}</span>
-    ) : run.status === "running" ? (
-      <span className="v2-badge-muted">{run.status}</span>
-    ) : (
-      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">
-        {run.status}
-      </span>
-    );
+  const showDocsPanel = files.length > 0;
+
+  const statusBadge = showRerunBanner ? (
+    <span className="v2-badge-muted">re-running</span>
+  ) : run.status === "completed" ? (
+    <span className="v2-badge-success">{run.status}</span>
+  ) : run.status === "running" ? (
+    <span className="v2-badge-muted">{run.status}</span>
+  ) : (
+    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">
+      {run.status}
+    </span>
+  );
 
   const meta = [
     run.task_description,
@@ -99,8 +189,6 @@ export function ResultsLayout({
   ]
     .filter(Boolean)
     .join(" · ");
-
-  const showResults = !isRunning && run.status === "completed";
 
   return (
     <div className="v2-page">
@@ -120,48 +208,47 @@ export function ResultsLayout({
         }
       />
 
-      {showResults && (
+      {hasCompletedResults && (
         <ExportBar
-          runId={run.run_id}
+          runId={displayRun.run_id}
           rows={rows}
           saveAction={saveAction}
-          workflowId={workflowId ?? run.workflow_id ?? undefined}
+          workflowId={workflowId ?? displayRun.workflow_id ?? undefined}
           defaultEmail={defaultEmail}
           defaultSheetsUrl={defaultSheetsUrl}
           onWorkflowSaved={onWorkflowSaved}
+          onVersionSaved={onVersionSaved}
         />
       )}
 
       <div className="flex flex-1 min-h-0">
-        {showResults && (
+        {showDocsPanel && (
           <DocsPanel
             files={files}
             selectedId={selectedDocId}
             onSelect={(id) => {
               setSelectedDocId(id);
-              setActiveTab("document");
+              if (!showPipelineProgress) {
+                setActiveTab("document");
+              }
             }}
           />
         )}
 
         <div className="flex flex-1 flex-col min-w-0 min-h-0">
-          {isRunning || run.status !== "completed" ? (
-            <div className="flex-1 overflow-auto p-6 space-y-4">
-              {isRunning && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Pipeline running…
-                </div>
-              )}
-              <StepStatusList
-                steps={run.steps}
-                plannedSteps={run.planned_steps}
-                showProgress={isRunning}
-              />
-              {run.status === "failed" && run.error_message && (
-                <p className="text-sm text-destructive">{run.error_message}</p>
-              )}
+          {showRerunBanner && (
+            <div className="shrink-0 flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Re-running extraction with your refinements…
             </div>
+          )}
+
+          {showPipelineProgress ? (
+            <PipelinePanel
+              run={run}
+              isRunning={isRunning}
+              title={hasCompletedResults ? "Re-running" : "Pipeline"}
+            />
           ) : (
             <>
               <TabSwitcher active={activeTab} onChange={setActiveTab} />
@@ -169,7 +256,7 @@ export function ResultsLayout({
                 <ResultsTabPanel rows={rows} flagCount={flagCount} />
               ) : selectedDocId ? (
                 <DocumentTabPanel
-                  uploadId={run.upload_id}
+                  uploadId={displayRun.upload_id}
                   documentId={selectedDocId}
                   filename={docNames[selectedDocId] ?? "Document"}
                 />
@@ -182,21 +269,17 @@ export function ResultsLayout({
           )}
         </div>
 
-        {showResults && (
+        {hasCompletedResults ? (
           <RefineChatPanel
-            runId={run.run_id}
+            runId={refineRunId}
+            chatSessionKey={chatSessionKey}
             disabled={isRunning}
-            documentCount={run.document_ids.length}
-            versionLabel={
-              run.parent_run_id
-                ? run.refine_summary
-                  ? `refined · ${run.refine_summary.slice(0, 40)}${run.refine_summary.length > 40 ? "…" : ""}`
-                  : "refined"
-                : versionLabel
-            }
+            saveAction={saveAction}
             variant="panel"
             onRefined={(newRunId) => onRefined(newRunId)}
           />
+        ) : (
+          <RefinePlaceholder running={isRunning} />
         )}
       </div>
     </div>

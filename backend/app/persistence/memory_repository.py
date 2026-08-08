@@ -1,5 +1,6 @@
 """In-memory data repository — dev / tests when no database is configured."""
 
+from dataclasses import replace
 from typing import Optional
 
 from app.models.domain.email import InboundAddress
@@ -73,6 +74,29 @@ class MemoryRepository:
             )
             for wf in workflows
         ]
+
+    def delete_workflow(self, workflow_id: str) -> None:
+        self._workflows.pop(workflow_id, None)
+        version_ids = [
+            version.version_id
+            for version in self._template_versions.values()
+            if version.scope_type == "workflow" and version.scope_id == workflow_id
+        ]
+        for version_id in version_ids:
+            self._template_versions.pop(version_id, None)
+        self._refinement_events = [
+            event
+            for event in self._refinement_events
+            if not (
+                event.scope_type == "workflow" and event.scope_id == workflow_id
+            )
+        ]
+        for address_id, address in list(self._inbound_addresses.items()):
+            if address.workflow_id == workflow_id:
+                self._inbound_addresses.pop(address_id, None)
+        for run_id, run in list(self._runs.items()):
+            if run.workflow_id == workflow_id:
+                self._runs[run_id] = replace(run, workflow_id=None)
 
     def save_template_version(self, version: UserTemplateVersionRecord) -> None:
         self._template_versions[version.version_id] = version

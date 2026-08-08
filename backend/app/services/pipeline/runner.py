@@ -143,6 +143,17 @@ async def execute_run(run_id: str) -> None:
     if prompt:
         planned = sync_prompt_to_steps(planned, prompt)
 
+    from app.services.pipeline.refine_logging import log_prompt, prompt_fingerprint
+
+    log_prompt(
+        logger,
+        "execute",
+        run_id=run_id,
+        label="resolved_extraction_prompt",
+        prompt=prompt or "",
+        extra={"parent_run_id": run.parent_run_id, "prompt_fp": prompt_fingerprint(prompt or "")},
+    )
+
     ctx = WorkflowContext(
         upload_id=run.upload_id,
         task_description=run.task_description,
@@ -183,6 +194,35 @@ async def execute_run(run_id: str) -> None:
                 status="completed",
                 output=result.output,
             )
+
+            if step.agent_type == "transform.field_extractor":
+                from app.services.pipeline.refine_logging import log_field_snapshot
+
+                instructions = str(step.config.get("instructions") or "")
+                rows = ctx.data.get("rows", [])
+                logger.info(
+                    "[refine] execute field_extractor run_id=%s parent_run_id=%s "
+                    "instructions_len=%d row_count=%d",
+                    run_id,
+                    run.parent_run_id,
+                    len(instructions),
+                    len(rows),
+                )
+                for row in rows[:3]:
+                    yoe_key = "years_of_experience"
+                    field_filter = (
+                        {yoe_key}
+                        if yoe_key in row or yoe_key in step.config.get("fields", [])
+                        else None
+                    )
+                    log_field_snapshot(
+                        logger,
+                        "execute-extract-result",
+                        run_id=run_id,
+                        document_id=str(row.get("document_id", "")),
+                        fields=row,
+                        field_filter=field_filter,
+                    )
 
             cached = _snapshot_documents(ctx.data.get("documents", []))
             save_run(

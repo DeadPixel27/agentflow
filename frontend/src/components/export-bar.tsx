@@ -20,6 +20,7 @@ interface ExportBarProps {
   defaultEmail?: string;
   defaultSheetsUrl?: string;
   onWorkflowSaved?: (workflowId: string) => void;
+  onVersionSaved?: () => void;
 }
 
 export function ExportBar({
@@ -30,6 +31,7 @@ export function ExportBar({
   defaultEmail,
   defaultSheetsUrl,
   onWorkflowSaved,
+  onVersionSaved,
 }: ExportBarProps) {
   const [showSave, setShowSave] = useState(false);
   const [showVersion, setShowVersion] = useState(false);
@@ -92,6 +94,10 @@ export function ExportBar({
           onClose={() => setShowVersion(false)}
           workflowId={workflowId}
           runId={runId}
+          onSaved={() => {
+            setShowVersion(false);
+            onVersionSaved?.();
+          }}
         />
       )}
       <EmailModal

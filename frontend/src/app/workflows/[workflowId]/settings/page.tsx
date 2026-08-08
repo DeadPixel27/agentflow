@@ -2,7 +2,7 @@
 
 import { Copy, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { NavBar } from "@/components/nav-bar";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ApiError,
+  deleteWorkflow,
   getWorkflow,
   getWorkflowTemplateVersions,
   revertWorkflowToVersion,
@@ -45,6 +46,7 @@ function AccountCard({
 }
 
 export default function WorkflowSettingsPage() {
+  const router = useRouter();
   const params = useParams();
   const workflowId = params.workflowId as string;
 
@@ -52,6 +54,7 @@ export default function WorkflowSettingsPage() {
   const [versions, setVersions] = useState<TemplateVersionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -129,6 +132,25 @@ export default function WorkflowSettingsPage() {
     const addr = `flow-${workflowId.slice(0, 6)}@ingest.agentflow.dev`;
     void navigator.clipboard.writeText(addr);
     toastSuccess("Copied forwarding address.");
+  }
+
+  async function handleDelete() {
+    const name = workflow?.name ?? "this workflow";
+    const confirmed = window.confirm(
+      `Delete "${name}"? This cannot be undone. Past runs will remain but will no longer be linked to this workflow.`,
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await deleteWorkflow(workflowId);
+      toastSuccess("Workflow deleted.");
+      router.push("/workflows");
+    } catch (e) {
+      toastError(e instanceof ApiError ? e.message : "Failed to delete workflow.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (loading) {
@@ -265,16 +287,18 @@ export default function WorkflowSettingsPage() {
 
           <AccountCard title="Danger Zone" danger>
             <p className="text-sm text-muted-foreground">
-              Archive or delete this workflow. Coming soon.
+              Permanently delete this workflow, its versions, and inbound email
+              configuration. Past run results are kept but unlinked from this
+              workflow.
             </p>
-            <div className="flex gap-2">
-              <Button variant="outline" disabled>
-                Archive
-              </Button>
-              <Button variant="destructive" disabled>
-                Delete
-              </Button>
-            </div>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete workflow
+            </Button>
           </AccountCard>
         </div>
       </main>

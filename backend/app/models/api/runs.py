@@ -39,6 +39,18 @@ class RefinePlanRequest(BaseModel):
     chat_history: list[RefineChatMessage] = Field(default_factory=list)
 
 
+class RefinePreviewField(BaseModel):
+    field: str
+    before: Any = None
+    after: Any = None
+
+
+class RefinePreviewRow(BaseModel):
+    document_id: str
+    filename: str = ""
+    fields: list[RefinePreviewField] = Field(default_factory=list)
+
+
 class RefinePlanResponse(BaseModel):
     """Response from plan mode clarification."""
 
@@ -46,6 +58,7 @@ class RefinePlanResponse(BaseModel):
     message: str  # assistant response to show in chat
     planned_changes: list[str] = Field(default_factory=list)
     accumulated_instruction: str = ""  # full instruction to send to /refine when ready
+    preview: list[RefinePreviewRow] = Field(default_factory=list)
 
 
 class RunAdhocRequest(BaseModel):

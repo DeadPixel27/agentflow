@@ -135,11 +135,24 @@ export interface RefinePlanMessage {
   content: string;
 }
 
+export interface RefinePreviewField {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface RefinePreviewRow {
+  document_id: string;
+  filename: string;
+  fields: RefinePreviewField[];
+}
+
 export interface RefinePlanResponse {
   ready: boolean;
   message: string;
   planned_changes: string[];
   accumulated_instruction: string;
+  preview: RefinePreviewRow[];
 }
 
 export interface TemplateVersionSummary {
@@ -408,6 +421,22 @@ export async function updateWorkflowFromRun(
       version_name: versionName,
     }),
   });
+}
+
+export async function deleteWorkflow(workflowId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/workflows/${workflowId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? JSON.stringify(body);
+    } catch {
+      // ignore
+    }
+    throw new ApiError(String(detail), res.status);
+  }
 }
 
 export async function emailResults(

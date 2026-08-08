@@ -17,7 +17,7 @@ REFINEMENT TYPES - identify which type the user is requesting:
 1. FIELD CORRECTION - user says a value is wrong or formatted incorrectly
    -> Add a reusable rule to extraction_prompt describing HOW to compute or normalize the field
    -> Encode the user's correction methodology (e.g. "sum work_experience durations from start_date")
-   -> You MAY include example employers/dates the user mentioned as calculation guidance when they explain a fix
+   -> NEVER include specific names, dates, or values from the user's example — write a GENERAL rule that works for any document
    -> Make rules GENERAL enough to apply to similar documents, not just one document id
 
 2. ADD FIELD - user wants additional data extracted
@@ -45,6 +45,8 @@ CRITICAL RULES:
 - When writing extraction_prompt rules, make them GENERAL and REUSABLE:
   BAD:  "The date in document abc-123 should be 2024-03-15"
   GOOD: "Dates in this vendor's invoices use DD/MM/YYYY format. Normalize to YYYY-MM-DD."
+  BAD:  "years_of_experience should be 2.5 based on BNY start date July 2024"
+  GOOD: "years_of_experience: sum durations of all work_experience entries. For each role, calculate (end_date or today) minus start_date in years. Return total as a decimal number."
 - Verify your output has all original fields plus additions minus explicit removals.
 
 EXAMPLE:

@@ -1,5 +1,6 @@
 """User template version service — object storage payloads + DB metadata."""
 
+import logging
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from app.services.pipeline.extraction_prompt import (
     resolve_run_extraction_prompt,
     sync_prompt_to_steps,
 )
+
+logger = logging.getLogger("user_template_versions")
 
 
 def resolve_root_run_id(repo: DataRepository, run_id: str) -> str:
@@ -309,6 +312,19 @@ class UserTemplateVersionService:
             return workflow
         steps, prompt = self.resolve_workflow_plan(workflow)
         return replace(workflow, steps=steps, extraction_prompt=prompt)
+
+    def delete_workflow_versions(self, workflow_id: str) -> None:
+        """Remove stored payloads for all versions scoped to a workflow."""
+        versions = self._repo.list_template_versions("workflow", workflow_id)
+        for version in versions:
+            try:
+                self._store.delete_version(version.storage_key)
+            except OSError:
+                logger.warning(
+                    "Failed to delete template version storage key=%s",
+                    version.storage_key,
+                    exc_info=True,
+                )
 
     def resolve_workflow_plan(
         self, workflow: WorkflowRecord

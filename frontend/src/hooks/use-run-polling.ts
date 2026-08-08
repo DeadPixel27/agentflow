@@ -53,9 +53,9 @@ export function useRunPolling(
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     completedRef.current = false;
+    setLoading((prev) => (run === null ? true : prev));
 
     async function poll() {
-      setLoading(true);
       const data = await fetchRun();
       if (cancelled) return;
       setLoading(false);
@@ -71,9 +71,13 @@ export function useRunPolling(
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset loading when runId changes
   }, [enabled, runId, fetchRun]);
 
-  const isRunning = run?.status === "running";
+  const isRunning =
+    run?.run_id === runId
+      ? run.status === "running"
+      : run !== null;
   const completedSteps =
     run?.steps.filter((s) => s.status === "completed").length ?? 0;
   const totalSteps = run?.steps.length ?? 0;

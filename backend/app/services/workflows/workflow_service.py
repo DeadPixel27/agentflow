@@ -282,3 +282,14 @@ class WorkflowService:
         if self._versions is not None:
             return self._versions.hydrate_workflow(workflow)
         return workflow
+
+    def delete_workflow(self, workflow_id: str) -> None:
+        """Permanently delete a workflow and its versioned template data."""
+        workflow = self._repo.get_workflow(workflow_id)
+        if workflow is None:
+            raise WorkflowNotFoundError(f"Workflow not found: {workflow_id}")
+
+        if self._versions is not None:
+            self._versions.delete_workflow_versions(workflow_id)
+
+        self._repo.delete_workflow(workflow_id)

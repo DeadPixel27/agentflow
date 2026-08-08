@@ -1,9 +1,8 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { ResultsLayout } from "@/components/results/results-layout";
 import { useRunPolling } from "@/hooks/use-run-polling";
@@ -12,11 +11,27 @@ import { toastError, toastSuccess } from "@/lib/toast";
 export default function ResultsPage() {
   const router = useRouter();
   const params = useParams();
-  const runId = params.runId as string;
+  const routeRunId = params.runId as string;
+  const [activeRunId, setActiveRunId] = useState(routeRunId);
+  const [refining, setRefining] = useState(false);
   const [savedWorkflowId, setSavedWorkflowId] = useState<string | null>(null);
+  const chatSessionKeyRef = useRef(
+    typeof window !== "undefined"
+      ? `${routeRunId}-${Date.now()}`
+      : routeRunId,
+  );
 
-  const { run, loading, error, isRunning } = useRunPolling(runId, {
+  useEffect(() => {
+    setActiveRunId(routeRunId);
+    chatSessionKeyRef.current = `${routeRunId}-${Date.now()}`;
+    setRefining(false);
+  }, [routeRunId]);
+
+  const { run, loading, error, isRunning } = useRunPolling(activeRunId, {
     onComplete: (data) => {
+      if (data.run_id === activeRunId) {
+        setRefining(false);
+      }
       if (data.status === "completed") {
         toastSuccess("Pipeline finished successfully.");
       } else if (data.status === "failed") {
@@ -30,7 +45,9 @@ export default function ResultsPage() {
     if (run?.workflow_id) setSavedWorkflowId(run.workflow_id);
   }, [run?.workflow_id]);
 
-  if (loading && !run) {
+  const showInitialLoader = loading && !run;
+
+  if (showInitialLoader) {
     return (
       <div className="v2-page items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -53,13 +70,18 @@ export default function ResultsPage() {
   return (
     <ResultsLayout
       run={run}
-      isRunning={isRunning}
+      isRunning={isRunning || refining}
       backHref="/"
       backLabel="New run"
       saveAction={savedWorkflowId ? "none" : "workflow"}
       workflowId={savedWorkflowId ?? undefined}
-      onRefined={(newRunId) => router.push(`/results/${newRunId}`)}
-      onWorkflowSaved={(id) => setSavedWorkflowId(id)}
+      refineRunId={activeRunId}
+      chatSessionKey={chatSessionKeyRef.current}
+      onRefined={(newRunId) => {
+        setRefining(true);
+        setActiveRunId(newRunId);
+        router.replace(`/results/${newRunId}`, { scroll: false });
+      }}
     />
   );
 }

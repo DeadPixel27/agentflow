@@ -1,24 +1,53 @@
 "use client";
 
-import { Loader2, Plus, Workflow } from "lucide-react";
+import { Loader2, Plus, Trash2, Workflow } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
 import { NavBar } from "@/components/nav-bar";
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
 import {
   ApiError,
+  deleteWorkflow,
   getUserWorkflows,
   type WorkflowSummary,
 } from "@/lib/api";
-import { toastError } from "@/lib/toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-function WorkflowCard({ workflow }: { workflow: WorkflowSummary }) {
+function WorkflowCard({
+  workflow,
+  onDeleted,
+}: {
+  workflow: WorkflowSummary;
+  onDeleted: (workflowId: string) => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
   const steps = Array.from({ length: workflow.step_count }, (_, i) => `S${i + 1}`);
+
+  async function handleDelete(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const confirmed = window.confirm(
+      `Delete "${workflow.name}"? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await deleteWorkflow(workflow.workflow_id);
+      toastSuccess("Workflow deleted.");
+      onDeleted(workflow.workflow_id);
+    } catch (e) {
+      toastError(e instanceof ApiError ? e.message : "Failed to delete workflow.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <Link
@@ -29,7 +58,24 @@ function WorkflowCard({ workflow }: { workflow: WorkflowSummary }) {
         <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-surface-2 text-[11px] font-bold">
           WF
         </span>
-        <span className="v2-badge-muted">Active</span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            disabled={deleting}
+            onClick={(event) => void handleDelete(event)}
+            aria-label={`Delete ${workflow.name}`}
+          >
+            {deleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <span className="v2-badge-muted">Active</span>
+        </div>
       </div>
       <h2 className="text-sm font-bold leading-snug">{workflow.name}</h2>
       <p className="text-xs text-muted-foreground mt-1 line-clamp-2 min-h-[2rem]">
@@ -124,7 +170,15 @@ export default function WorkflowsPage() {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl">
           {workflows.map((wf) => (
-            <WorkflowCard key={wf.workflow_id} workflow={wf} />
+            <WorkflowCard
+              key={wf.workflow_id}
+              workflow={wf}
+              onDeleted={(workflowId) =>
+                setWorkflows((prev) =>
+                  prev.filter((item) => item.workflow_id !== workflowId),
+                )
+              }
+            />
           ))}
         </div>
       </main>

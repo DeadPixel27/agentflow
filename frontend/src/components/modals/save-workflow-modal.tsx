@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ModalShell } from "@/components/modals/modal-shell";
@@ -24,6 +25,7 @@ export function SaveWorkflowModal({
   runId,
   onSaved,
 }: SaveWorkflowModalProps) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,6 +40,8 @@ export function SaveWorkflowModal({
       const wf = await saveWorkflowFromRun(runId, userId, name.trim());
       toastSuccess("Workflow saved.");
       onSaved(wf.workflow_id);
+      onClose();
+      router.push("/workflows");
     } catch (e) {
       toastError(
         e instanceof ApiError ? e.message : "Failed to save workflow.",

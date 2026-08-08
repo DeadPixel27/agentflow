@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Loader2, MessageSquare, Play, Send } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +12,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import type { SaveAction } from "@/components/export-bar";
 import {
   ApiError,
   refinePlan,
   refineRun,
   type RefinePlanMessage,
+  type RefinePreviewRow,
 } from "@/lib/api";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -25,38 +27,123 @@ interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   planned_changes?: string[];
+  preview?: RefinePreviewRow[];
+}
+
+function formatPreviewValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value || "—";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    const text = JSON.stringify(value);
+    return text.length > 80 ? `${text.slice(0, 77)}…` : text;
+  } catch {
+    return String(value);
+  }
+}
+
+function PreviewPanel({ preview }: { preview: RefinePreviewRow[] }) {
+  if (preview.length === 0) return null;
+
+  return (
+    <div className="mt-2 ml-1 rounded-md border border-primary/20 bg-primary/5 p-2.5 space-y-2">
+      <p className="text-xs font-medium text-foreground">Preview after apply</p>
+      {preview.map((row) => (
+        <div key={row.document_id} className="space-y-1">
+          {row.filename && (
+            <p className="text-[11px] text-muted-foreground truncate">{row.filename}</p>
+          )}
+          {row.fields.map((item) => (
+            <div
+              key={`${row.document_id}-${item.field}`}
+              className="text-xs font-mono leading-relaxed"
+            >
+              <span className="text-muted-foreground">{item.field}:</span>{" "}
+              <span className="text-destructive/80 line-through">
+                {formatPreviewValue(item.before)}
+              </span>
+              <span className="text-muted-foreground"> → </span>
+              <span className="text-green-700 dark:text-green-400 font-semibold">
+                {formatPreviewValue(item.after)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 interface RefineChatPanelProps {
   runId: string;
+  chatSessionKey?: string;
   disabled?: boolean;
-  documentCount?: number;
-  versionLabel?: string;
+  saveAction?: SaveAction;
   variant?: "card" | "panel";
   onRefined: (newRunId: string, summary: string) => void;
 }
 
+function RefineSaveDisclaimer({ saveAction }: { saveAction?: SaveAction }) {
+  if (saveAction === "version") {
+    return (
+      <p className="v2-callout-warning text-xs leading-relaxed">
+        <span className="font-semibold">Draft only.</span> Refinements update this
+        run&apos;s results on screen. Your saved workflow version stays the same until
+        you click <span className="font-semibold">Save as New Version</span>.
+      </p>
+    );
+  }
+
+  if (saveAction === "workflow") {
+    return (
+      <p className="v2-callout-warning text-xs leading-relaxed">
+        <span className="font-semibold">Draft only.</span> Refinements update this
+        run&apos;s results on screen. Nothing is saved as a reusable workflow until
+        you click <span className="font-semibold">Save as Workflow</span>.
+      </p>
+    );
+  }
+
+  return (
+    <p className="v2-callout-warning text-xs leading-relaxed">
+      <span className="font-semibold">Draft only.</span> Refinements update this run
+      only. The original run and any saved workflow stay unchanged until you explicitly
+      save.
+    </p>
+  );
+}
+
 export function RefineChatPanel({
   runId,
+  chatSessionKey,
   disabled,
-  documentCount = 1,
-  versionLabel,
+  saveAction,
   variant = "card",
   onRefined,
 }: RefineChatPanelProps) {
+  const sessionKey = chatSessionKey ?? runId;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [readyToApply, setReadyToApply] = useState(false);
   const [accumulatedInstruction, setAccumulatedInstruction] = useState("");
+  const [preview, setPreview] = useState<RefinePreviewRow[]>([]);
 
   useEffect(() => {
     setHistory([]);
     setMessage("");
     setReadyToApply(false);
     setAccumulatedInstruction("");
-  }, [runId]);
+    setPreview([]);
+  }, [sessionKey]);
+
+  useEffect(() => {
+    if (!loading && !applying && !disabled) {
+      textareaRef.current?.focus();
+    }
+  }, [loading, applying, disabled]);
 
   async function handleSend() {
     const text = message.trim();
@@ -80,21 +167,25 @@ export function RefineChatPanel({
           role: "assistant",
           text: result.message,
           planned_changes: result.planned_changes,
+          preview: result.ready ? result.preview : undefined,
         },
       ]);
 
       if (result.ready && result.accumulated_instruction) {
         setReadyToApply(true);
         setAccumulatedInstruction(result.accumulated_instruction);
+        setPreview(result.preview ?? []);
       } else if (result.ready) {
         setReadyToApply(true);
         setAccumulatedInstruction(
           result.accumulated_instruction ||
             `Apply these refinements: ${(result.planned_changes || []).join("; ")}. User request: ${text}`,
         );
+        setPreview(result.preview ?? []);
       } else {
         setReadyToApply(false);
         setAccumulatedInstruction("");
+        setPreview([]);
       }
     } catch (e) {
       toastError(e instanceof ApiError ? e.message : "Plan mode failed.");
@@ -126,6 +217,7 @@ export function RefineChatPanel({
       });
       setReadyToApply(false);
       setAccumulatedInstruction("");
+      setPreview([]);
       onRefined(result.run.run_id, result.refine_summary);
     } catch (e) {
       toastError(e instanceof ApiError ? e.message : "Refine failed.");
@@ -135,10 +227,6 @@ export function RefineChatPanel({
       setApplying(false);
     }
   }
-
-  const badgeText = versionLabel
-    ? `Refining all ${documentCount} docs · ${versionLabel}`
-    : `Refining all ${documentCount} docs`;
 
   const chatMessages = (
     <div className="flex-1 overflow-y-auto space-y-2 p-4 min-h-0">
@@ -178,14 +266,21 @@ export function RefineChatPanel({
               ))}
             </div>
           )}
+          {item.preview && item.preview.length > 0 && (
+            <PreviewPanel preview={item.preview} />
+          )}
         </div>
       ))}
+      {readyToApply && preview.length > 0 && (
+        <PreviewPanel preview={preview} />
+      )}
     </div>
   );
 
   const inputArea = (
     <div className="shrink-0 border-t border-border p-3 space-y-2">
       <Textarea
+        ref={textareaRef}
         placeholder={
           readyToApply
             ? "Looks good? Click Apply — or keep refining..."
@@ -255,7 +350,7 @@ export function RefineChatPanel({
           <p className="text-xs text-muted-foreground">
             Tell me what to change — I&apos;ll plan first, then apply.
           </p>
-          <span className="v2-badge-success">{badgeText}</span>
+          <RefineSaveDisclaimer saveAction={saveAction} />
         </div>
         {chatMessages}
         {inputArea}
@@ -276,6 +371,7 @@ export function RefineChatPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <RefineSaveDisclaimer saveAction={saveAction} />
         {history.length > 0 && (
           <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm max-h-48 overflow-y-auto">
             {history.map((item, index) => (
@@ -304,6 +400,7 @@ export function RefineChatPanel({
           </div>
         )}
         <Textarea
+          ref={variant === "card" ? textareaRef : undefined}
           placeholder={
             readyToApply
               ? "Looks good? Click Apply — or keep refining..."

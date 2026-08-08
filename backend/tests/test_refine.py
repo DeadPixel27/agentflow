@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_refine_service, get_repo
+from app.api.dependencies import get_refine_service, get_repo, get_version_service
 from app.main import app
 from app.models.domain.pipeline import PlannedStep
 from app.models.domain.run import RunResult, StepRunRecord
@@ -178,18 +178,36 @@ def test_refine_plan_endpoint(monkeypatch):
 
     async def _fake_plan(**kwargs):
         return {
-            "ready": False,
-            "message": "I'll normalize dates to YYYY-MM-DD. Confirm?",
+            "ready": True,
+            "message": "Ready to apply: normalize dates.",
             "planned_changes": ["Normalize dates to YYYY-MM-DD"],
-            "accumulated_instruction": "",
+            "accumulated_instruction": "Normalize all dates to YYYY-MM-DD.",
         }
+
+    async def _fake_preview(*args, **kwargs):
+        return [
+            {
+                "document_id": "doc-1",
+                "filename": "inv.pdf",
+                "fields": [
+                    {"field": "vendor", "before": "Acme", "after": "Acme"},
+                    {"field": "amount", "before": "$1000", "after": 1000},
+                ],
+            }
+        ]
 
     monkeypatch.setattr(
         "app.services.pipeline.refine_chat.plan_refinement",
         _fake_plan,
     )
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_preview.preview_refinement",
+        _fake_preview,
+    )
 
     app.dependency_overrides[get_repo] = lambda: repo
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    app.dependency_overrides[get_version_service] = lambda: versions
     try:
         response = client.post(
             "/api/runs/run-parent/refine/plan",
@@ -197,9 +215,11 @@ def test_refine_plan_endpoint(monkeypatch):
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["ready"] is False
+        assert body["ready"] is True
         assert "dates" in body["message"].lower()
         assert body["planned_changes"] == ["Normalize dates to YYYY-MM-DD"]
+        assert len(body["preview"]) == 1
+        assert body["preview"][0]["fields"][1]["after"] == 1000
     finally:
         app.dependency_overrides.clear()
 
@@ -244,7 +264,7 @@ def test_plan_refinement_forces_ready_when_user_answers_clarification():
 
 
 @pytest.mark.asyncio
-async def test_refine_and_start_merges_feedback_and_versions_template_run(monkeypatch):
+async def test_refine_and_start_merges_feedback_only_when_refiner_unchanged(monkeypatch):
     from app.services.pipeline.refine_service import RefineService
 
     repo = MemoryRepository()
@@ -290,8 +310,63 @@ async def test_refine_and_start_merges_feedback_and_versions_template_run(monkey
     assert child.parent_run_id == parent.run_id
     assert child.current_template_version_id
     assert "July 2024" in (child.extraction_prompt or "")
-    assert "years_of_experience" in (child.extraction_prompt or "").lower()
     assert summary
+
+
+@pytest.mark.asyncio
+async def test_refine_and_start_does_not_poison_prompt_when_refiner_updates(monkeypatch):
+    from app.services.pipeline.refine_service import RefineService
+
+    repo = MemoryRepository()
+    parent = _completed_run()
+    parent.template_id = "resume"
+    repo.save_run(parent)
+
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    parent = versions.attach_initial_run_version(
+        parent,
+        template_id="resume",
+        planned_steps=parent.planned_steps,
+        extraction_prompt="Extract name",
+    )
+    repo.save_run(parent)
+
+    general_rule = (
+        "years_of_experience: sum durations of all work_experience entries. "
+        "For each role, calculate (end_date or today) minus start_date in years."
+    )
+
+    async def _fake_execute(self, ctx, config):
+        from app.agents.core.base import StepResult
+        from app.persistence.serialization import planned_steps_to_json
+
+        steps = ctx.data["current_steps"]
+        return StepResult(
+            output={
+                "summary": "Updated years_of_experience calculation rule.",
+                "extraction_prompt": f"Extract name\n\n{general_rule}",
+                "planned_steps": planned_steps_to_json(steps),
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.agents.handlers.transforms.pipeline_refiner.PipelineRefinerHandler.execute",
+        _fake_execute,
+    )
+    monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
+    monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
+
+    service = RefineService(repo, versions)
+    feedback = (
+        "years_of_experience should be ~2 years — calculate from BNY start date July 2024"
+    )
+    child, _summary = await service.refine_and_start(parent.run_id, feedback)
+
+    prompt = child.extraction_prompt or ""
+    assert general_rule in prompt
+    assert "BNY" not in prompt
+    assert "July 2024" not in prompt
+    assert "2 years" not in prompt
 
 
 def test_plan_refinement_forces_ready_on_repeated_assistant_message():

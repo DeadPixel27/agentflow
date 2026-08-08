@@ -317,6 +317,23 @@ class SupabaseRepository:
             for row in resp.data or []
         ]
 
+    def delete_workflow(self, workflow_id: str) -> None:
+        versions_resp = (
+            _get_client()
+            .table("user_template_versions")
+            .select("id")
+            .eq("scope_type", "workflow")
+            .eq("scope_id", workflow_id)
+            .execute()
+        )
+        version_ids = [row["id"] for row in versions_resp.data or []]
+        if version_ids:
+            _get_client().table("user_template_versions").delete().in_(
+                "id", version_ids
+            ).execute()
+
+        _get_client().table("workflows").delete().eq("id", workflow_id).execute()
+
     def save_template_version(self, version: UserTemplateVersionRecord) -> None:
         _get_client().table("user_template_versions").upsert(
             {

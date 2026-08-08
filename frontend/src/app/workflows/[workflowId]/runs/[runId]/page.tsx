@@ -1,9 +1,8 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { ResultsLayout } from "@/components/results/results-layout";
 import { useRunPolling } from "@/hooks/use-run-polling";
@@ -14,12 +13,27 @@ export default function WorkflowRunResultsPage() {
   const router = useRouter();
   const params = useParams();
   const workflowId = params.workflowId as string;
-  const runId = params.runId as string;
-
+  const routeRunId = params.runId as string;
+  const [activeRunId, setActiveRunId] = useState(routeRunId);
+  const [refining, setRefining] = useState(false);
   const [workflow, setWorkflow] = useState<WorkflowResponse | null>(null);
+  const chatSessionKeyRef = useRef(
+    typeof window !== "undefined"
+      ? `${routeRunId}-${Date.now()}`
+      : routeRunId,
+  );
 
-  const { run, loading, error, isRunning } = useRunPolling(runId, {
+  useEffect(() => {
+    setActiveRunId(routeRunId);
+    chatSessionKeyRef.current = `${routeRunId}-${Date.now()}`;
+    setRefining(false);
+  }, [routeRunId]);
+
+  const { run, loading, error, isRunning } = useRunPolling(activeRunId, {
     onComplete: (data) => {
+      if (data.run_id === activeRunId) {
+        setRefining(false);
+      }
       if (data.status === "completed") {
         toastSuccess("Pipeline finished successfully.");
       } else if (data.status === "failed") {
@@ -42,7 +56,9 @@ export default function WorkflowRunResultsPage() {
       ? `v${workflow.current_version_number}`
       : undefined;
 
-  if (loading && !run) {
+  const showInitialLoader = loading && !run;
+
+  if (showInitialLoader) {
     return (
       <div className="v2-page items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -63,16 +79,26 @@ export default function WorkflowRunResultsPage() {
   return (
     <ResultsLayout
       run={run}
-      isRunning={isRunning}
+      isRunning={isRunning || refining}
       backHref={`/workflows/${workflowId}`}
       backLabel="Back to workflow"
       title={workflow?.name ?? "Workflow Results"}
       saveAction="version"
       workflowId={workflowId}
       versionLabel={versionLabel}
-      onRefined={(newRunId) =>
-        router.push(`/workflows/${workflowId}/runs/${newRunId}`)
-      }
+      refineRunId={activeRunId}
+      chatSessionKey={chatSessionKeyRef.current}
+      onRefined={(newRunId) => {
+        setRefining(true);
+        setActiveRunId(newRunId);
+        router.replace(
+          `/workflows/${workflowId}/runs/${newRunId}`,
+          { scroll: false },
+        );
+      }}
+      onVersionSaved={() => {
+        router.push(`/workflows/${workflowId}`);
+      }}
     />
   );
 }

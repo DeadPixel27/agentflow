@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ModalShell } from "@/components/modals/modal-shell";
@@ -15,6 +16,7 @@ interface SaveVersionModalProps {
   onClose: () => void;
   workflowId: string;
   runId: string;
+  onSaved?: () => void;
 }
 
 export function SaveVersionModal({
@@ -22,7 +24,9 @@ export function SaveVersionModal({
   onClose,
   workflowId,
   runId,
+  onSaved,
 }: SaveVersionModalProps) {
+  const router = useRouter();
   const [versionName, setVersionName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +39,9 @@ export function SaveVersionModal({
         versionName.trim() || undefined,
       );
       toastSuccess("New version saved.");
+      onSaved?.();
       onClose();
+      router.push(`/workflows/${workflowId}`);
     } catch (e) {
       toastError(
         e instanceof ApiError

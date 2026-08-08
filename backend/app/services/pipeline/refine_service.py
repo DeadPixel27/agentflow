@@ -1,5 +1,6 @@
 """Refine service — chat-driven pipeline edits and re-runs."""
 
+import logging
 from dataclasses import replace
 
 from app.agents.core.context import WorkflowContext, documents_to_dicts
@@ -10,10 +11,12 @@ from app.persistence.serialization import planned_steps_from_json
 from app.services.documents.upload_loader import load_upload_documents
 from app.services.pipeline.extraction_prompt import merge_prompt_addition, sync_prompt_to_steps
 from app.services.pipeline.pipeline_refiner import RefinerError
+from app.services.pipeline.refine_logging import log_prompt, prompt_fingerprint
 from app.services.pipeline.runner import start_run
 from app.services.templates.user_template_version_service import UserTemplateVersionService
 
 _PIPELINE_REFINER = "transform.pipeline_refiner"
+logger = logging.getLogger("refine_service")
 
 
 class RunNotFoundError(Exception):
@@ -56,6 +59,27 @@ class RefineService:
 
         planned_steps, base_prompt = self._versions.resolve_run_plan(parent)
 
+        logger.info(
+            "[refine] apply start parent_run_id=%s template_id=%s message_len=%d",
+            parent.run_id,
+            parent.template_id,
+            len(message),
+        )
+        log_prompt(
+            logger,
+            "apply",
+            run_id=parent.run_id,
+            label="base_prompt",
+            prompt=base_prompt,
+        )
+        log_prompt(
+            logger,
+            "apply",
+            run_id=parent.run_id,
+            label="user_message_to_refiner",
+            prompt=message,
+        )
+
         refinement_history: list[str] = []
         current = parent
         seen_ids: set[str] = set()
@@ -89,14 +113,73 @@ class RefineService:
         output = result.output
         new_steps = planned_steps_from_json(output.get("planned_steps"))
         summary = str(output.get("summary", "Pipeline updated.")).strip()
-        new_prompt = str(output.get("extraction_prompt") or base_prompt).strip()
-        feedback = message.strip()
-        if feedback:
-            merged = merge_prompt_addition(new_prompt, feedback)
-            if merged != new_prompt:
-                new_prompt = merged
+        refiner_prompt = str(output.get("extraction_prompt") or base_prompt).strip()
+        new_prompt = refiner_prompt
+        used_fallback_merge = False
+
+        log_prompt(
+            logger,
+            "apply",
+            run_id=parent.run_id,
+            label="refiner_output_prompt",
+            prompt=refiner_prompt,
+            extra={
+                "refiner_changed_prompt": refiner_prompt.strip() != base_prompt.strip(),
+                "refiner_summary": summary,
+                "base_fp": prompt_fingerprint(base_prompt),
+                "refiner_fp": prompt_fingerprint(refiner_prompt),
+            },
+        )
+
+        # Only use raw feedback as fallback when the refiner returned nothing new.
+        # Do NOT merge raw user text into the prompt — it contains document-specific
+        # values (e.g. "should be 2.5 years") that poison extraction of other documents.
+        if not new_prompt or new_prompt.strip() == base_prompt.strip():
+            feedback = message.strip()
+            if feedback:
+                used_fallback_merge = True
+                new_prompt = merge_prompt_addition(base_prompt, feedback)
                 if summary == "Pipeline updated.":
                     summary = "Updated extraction instructions from your feedback."
+                log_prompt(
+                    logger,
+                    "apply",
+                    run_id=parent.run_id,
+                    label="fallback_merged_prompt",
+                    prompt=new_prompt,
+                    extra={"reason": "refiner returned unchanged prompt"},
+                )
+        else:
+            feedback = message.strip()
+
+        preview_fp = prompt_fingerprint(
+            merge_prompt_addition(base_prompt, message.strip())
+        )
+        apply_fp = prompt_fingerprint(new_prompt)
+        log_prompt(
+            logger,
+            "apply",
+            run_id=parent.run_id,
+            label="final_apply_prompt",
+            prompt=new_prompt,
+            extra={"used_fallback_merge": used_fallback_merge},
+        )
+        if preview_fp != apply_fp:
+            logger.warning(
+                "[refine] PROMPT MISMATCH parent_run_id=%s preview_would_use_fp=%s "
+                "apply_uses_fp=%s — preview merges accumulated_instruction directly; "
+                "apply uses refiner output. Values may differ (e.g. years_of_experience).",
+                parent.run_id,
+                preview_fp,
+                apply_fp,
+            )
+        else:
+            logger.info(
+                "[refine] prompt match parent_run_id=%s fp=%s",
+                parent.run_id,
+                apply_fp,
+            )
+
         new_steps = sync_prompt_to_steps(new_steps, new_prompt)
 
         cached_documents = parent.cached_documents
@@ -114,6 +197,13 @@ class RefineService:
             extraction_prompt=new_prompt,
             cached_documents=cached_documents,
             refine_summary=summary,
+        )
+
+        logger.info(
+            "[refine] apply child started parent_run_id=%s child_run_id=%s summary=%r",
+            parent.run_id,
+            child.run_id,
+            summary,
         )
 
         if parent.template_id:

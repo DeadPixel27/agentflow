@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     groq_refiner_model: str = "llama-3.3-70b-versatile"
     # Owner master template synthesis
     groq_owner_model: str = "llama-3.3-70b-versatile"
+    # Comma-separated fallbacks when primary model fails
+    groq_fallback_models: str = (
+        "llama-3.1-8b-instant,"
+        "meta-llama/llama-4-scout-17b-16e-instruct,"
+        "openai/gpt-oss-20b"
+    )
     admin_api_key: str = ""
 
     # User template version payloads: auto | local | supabase | aws_s3
@@ -90,6 +96,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def groq_fallback_models_list(self) -> list[str]:
+        return [
+            model.strip()
+            for model in self.groq_fallback_models.split(",")
+            if model.strip()
+        ]
 
     @property
     def max_upload_size_bytes(self) -> int:

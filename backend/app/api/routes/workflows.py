@@ -234,3 +234,27 @@ async def update_workflow_settings(
         workflow,
         current_version_number=workflows.current_version_number(workflow),
     )
+
+
+@router.delete("/{workflow_id}", status_code=204)
+async def delete_workflow(
+    workflow_id: str,
+    workflows: WorkflowServiceDep,
+) -> None:
+    """Permanently delete a workflow."""
+    try:
+        workflows.delete_workflow(workflow_id)
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.delete("/{workflow_id}", status_code=204)
+async def delete_workflow(
+    workflow_id: str,
+    workflows: WorkflowServiceDep,
+) -> None:
+    """Permanently delete a workflow."""
+    try:
+        workflows.delete_workflow(workflow_id)
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
