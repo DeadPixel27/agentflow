@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/workflows", label: "Workflows" },
+  { href: "/pricing", label: "Pricing" },
 ];
 
 function initials(name: string): string {

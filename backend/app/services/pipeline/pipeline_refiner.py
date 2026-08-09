@@ -19,6 +19,9 @@ REFINEMENT TYPES - identify which type the user is requesting:
    -> Encode the user's correction methodology (e.g. "sum work_experience durations from start_date")
    -> NEVER include specific names, dates, or values from the user's example — write a GENERAL rule that works for any document
    -> Make rules GENERAL enough to apply to similar documents, not just one document id
+   -> REPLACE conflicting old calculation rules for that field — do not leave contradictory sentences
+     (e.g. remove "earliest start date to today" when switching to "sum of role durations")
+   -> The final extraction_prompt must contain exactly one coherent rule per corrected field
 
 2. ADD FIELD - user wants additional data extracted
    -> Add the field to the field_extractor step's config.fields list

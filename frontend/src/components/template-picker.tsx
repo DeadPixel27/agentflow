@@ -8,12 +8,15 @@ import {
   Home,
   Loader2,
   Package,
+  Play,
   Receipt,
   Scale,
   User,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,9 +30,13 @@ import {
   ApiError,
   getTemplate,
   listTemplates,
+  runTemplate,
+  uploadFiles,
   type PipelineTemplate,
   type PipelineTemplateSummary,
 } from "@/lib/api";
+import { toastError } from "@/lib/toast";
+import { ensureUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
 const ICON_MAP: Record<string, typeof FileText> = {
@@ -170,20 +177,84 @@ export function TemplatePickerSection({
   onClear,
   disabled,
 }: TemplatePickerProps) {
+  const router = useRouter();
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [showUsageLimit, setShowUsageLimit] = useState(false);
+  const [usageLimitMsg, setUsageLimitMsg] = useState("");
+
+  async function handleTrySample() {
+    try {
+      setSampleLoading(true);
+      await ensureUser();
+      const response = await fetch("/samples/sample-invoice.pdf");
+      if (!response.ok) {
+        throw new Error("Sample invoice is missing.");
+      }
+      const blob = await response.blob();
+      const file = new File([blob], "sample-invoice.pdf", {
+        type: "application/pdf",
+      });
+
+      const upload = await uploadFiles([file]);
+      const run = await runTemplate(upload.upload_id, "invoice");
+      router.push(`/results/${run.run_id}`);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        switch (e.status) {
+          case 401:
+            break;
+          case 429:
+            setUsageLimitMsg(e.message);
+            setShowUsageLimit(true);
+            break;
+          case 503:
+            toastError(
+              "Service is temporarily at capacity. Please try again in a few minutes.",
+            );
+            break;
+          default:
+            toastError(e.message);
+        }
+      } else {
+        toastError(e instanceof Error ? e.message : "Failed to run sample.");
+      }
+    } finally {
+      setSampleLoading(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Start from a template</CardTitle>
-        <CardDescription>
-          Pick a preset — we&apos;ll run an optimized pipeline with curated fields
-          and domain-specific extraction rules.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-1.5">
+            <CardTitle>Start from a template</CardTitle>
+            <CardDescription>
+              Pick a preset — we&apos;ll run an optimized pipeline with curated fields
+              and domain-specific extraction rules.
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleTrySample()}
+            disabled={disabled || sampleLoading}
+            className="gap-2 shrink-0"
+          >
+            {sampleLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            Try with sample invoice
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <TemplatePicker
           selectedId={selectedId}
           onSelect={onSelect}
-          disabled={disabled}
+          disabled={disabled || sampleLoading}
         />
         {selectedId && onClear && (
           <Button
@@ -191,13 +262,18 @@ export function TemplatePickerSection({
             variant="ghost"
             size="sm"
             className="mt-3 px-0 text-muted-foreground"
-            disabled={disabled}
+            disabled={disabled || sampleLoading}
             onClick={onClear}
           >
             Or describe your own task
           </Button>
         )}
       </CardContent>
+      <UsageLimitModal
+        open={showUsageLimit}
+        onClose={() => setShowUsageLimit(false)}
+        message={usageLimitMsg}
+      />
     </Card>
   );
 }

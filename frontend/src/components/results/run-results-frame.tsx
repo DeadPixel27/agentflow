@@ -11,7 +11,7 @@ import { useRunResultsContext } from "@/components/results/run-results-context";
 import { TabSwitcher, type ResultsTab } from "@/components/results/tab-switcher";
 import { StepStatusList } from "@/components/run-display";
 import { TopBar } from "@/components/top-bar";
-import { getUploadDocuments } from "@/lib/api";
+import { getUploadDocuments, type RunResponse } from "@/lib/api";
 
 function PipelinePanel({
   isRunning,
@@ -51,6 +51,20 @@ function PipelinePanel({
   );
 }
 
+function inferPipelineExtractionMethod(
+  run?: RunResponse | null,
+): string | undefined {
+  if (!run?.steps?.length) return undefined;
+  const completed = run.steps.filter((s) => s.status === "completed");
+  if (completed.some((s) => s.agent_type === "processor.ocr")) {
+    return "rapidocr";
+  }
+  if (completed.some((s) => s.agent_type === "processor.text_extract")) {
+    return "pymupdf";
+  }
+  return undefined;
+}
+
 interface RunResultsFrameProps {
   refinePanel: ReactNode;
 }
@@ -63,6 +77,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
   const [activeTab, setActiveTab] = useState<ResultsTab>("results");
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [docNames, setDocNames] = useState<Record<string, string>>({});
+  const [docMethods, setDocMethods] = useState<Record<string, string>>({});
   const [refineUnlocked, setRefineUnlocked] = useState(false);
   const [lastCompletedRun, setLastCompletedRun] = useState(
     run?.status === "completed" ? run : null,
@@ -107,10 +122,15 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
     getUploadDocuments(uploadId)
       .then((res) => {
         const map: Record<string, string> = {};
+        const methods: Record<string, string> = {};
         for (const doc of res.documents) {
           map[doc.document_id] = doc.filename;
+          if (doc.extraction_method) {
+            methods[doc.document_id] = doc.extraction_method;
+          }
         }
         setDocNames(map);
+        setDocMethods(methods);
         if (res.documents[0] && !selectedDocId) {
           setSelectedDocId(res.documents[0].document_id);
         }
@@ -121,13 +141,24 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
   }, [uploadId, selectedDocId]);
 
   const docSourceRun = hasCompletedResults ? displayRun : run;
+  const fallbackMethod = inferPipelineExtractionMethod(displayRun ?? run);
+  const validationWarnings = displayRun?.result?.validation_warnings;
   const files = useMemo(
     () =>
       (docSourceRun?.document_ids ?? []).map((id) => ({
         id,
         name: docNames[id] ?? id.slice(0, 8),
+        warningCount: validationWarnings?.[id]?.length ?? 0,
       })),
-    [docSourceRun?.document_ids, docNames],
+    [docSourceRun?.document_ids, docNames, validationWarnings],
+  );
+  const totalWarnings = useMemo(
+    () =>
+      Object.values(validationWarnings ?? {}).reduce(
+        (sum, list) => sum + list.length,
+        0,
+      ),
+    [validationWarnings],
   );
 
   const showDocsPanel = files.length > 0;
@@ -210,6 +241,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
           <DocsPanel
             files={files}
             selectedId={selectedDocId}
+            totalWarnings={totalWarnings}
             onSelect={(id) => {
               setSelectedDocId(id);
               if (!showPipelineProgress) {
@@ -220,6 +252,12 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
         )}
 
         <div className="flex flex-1 flex-col min-w-0 min-h-0">
+          {isRerunning && (
+            <div className="shrink-0 flex items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Re-running extraction with your refinements...</span>
+            </div>
+          )}
           {showPipelineProgress ? (
             <PipelinePanel
               isRunning={isRunning}
@@ -233,12 +271,17 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
                   rows={rows}
                   flagCount={flagCount}
                   isUpdating={isRerunning}
+                  fieldConfidence={displayRun?.result?.field_confidence}
+                  validationWarnings={displayRun?.result?.validation_warnings}
                 />
               ) : selectedDocId ? (
                 <DocumentTabPanel
                   uploadId={displayRun.upload_id}
                   documentId={selectedDocId}
                   filename={docNames[selectedDocId] ?? "Document"}
+                  extractionMethod={
+                    docMethods[selectedDocId] ?? fallbackMethod
+                  }
                 />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">

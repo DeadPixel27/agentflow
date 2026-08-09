@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Optional
 
 from app.services.llm.router import LLMTask, complete_json
@@ -39,6 +40,11 @@ NORMALIZATION RULES:
 - Names: Title Case. "JOHN DOE" -> "John Doe", "josé garcía" -> "José García".
 - Tax IDs: Extract as-is (GSTIN, VAT, EIN, ABN, etc.) — do not normalize.
 - Addresses: Single string with commas. Preserve structure.
+
+RELATIVE DATES:
+- The input payload includes "today". Use it for any "Present"/"Current"/"Ongoing" end date
+  and for any duration or age calculation. Never guess the current date.
+- Durations in years: (end - start).days / 365.25, rounded to 2 decimals.
 
 SYNONYM AWARENESS (extract even if labeled differently):
 - Invoice Number = Bill No, Reference, Factura Nr, Rechnungsnummer, Invoice #, Document Number
@@ -251,6 +257,7 @@ def _build_prompt(
     instructions: Optional[str],
 ) -> str:
     payload = {
+        "today": date.today().isoformat(),
         "fields_to_extract": fields,
         "instructions": instructions or "",
         "documents": [

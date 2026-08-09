@@ -14,6 +14,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { type SaveAction } from "@/components/export-bar";
+import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { RunResultsFrame } from "@/components/results/run-results-frame";
 import { RefineChatPanel } from "@/components/refine-chat";
 import type { RunResponse } from "@/lib/api";
@@ -116,6 +117,8 @@ export function RunResultsShell({
     useState<RunResultsPageConfig>(defaultPageConfig);
   const [hasCompletedResults, setHasCompletedResults] = useState(false);
   const [refineDisabled, setRefineDisabled] = useState(false);
+  const [showUsageLimit, setShowUsageLimit] = useState(false);
+  const [usageLimitMsg, setUsageLimitMsg] = useState("");
   const chatSessionKeyRef = useRef(
     typeof window !== "undefined"
       ? `${routeRunId}-${Date.now()}`
@@ -133,14 +136,19 @@ export function RunResultsShell({
     }
   }, [routeRunId]);
 
-  const handleRefined = useCallback(
-    (newRunId: string) => {
-      setRefining(true);
-      setActiveRunId(newRunId);
-      router.replace(makeRunHref(newRunId), { scroll: false });
-    },
-    [makeRunHref, router],
-  );
+  const handleRefined = useCallback((newRunId: string) => {
+    setRefining(true);
+    setActiveRunId(newRunId);
+    // Don't router.replace yet - wait until the child run completes
+    // to avoid loading flicker and page-refresh feel.
+  }, []);
+
+  useEffect(() => {
+    // Update URL after refinement completes (deferred from handleRefined)
+    if (!refining && activeRunId !== routeRunId) {
+      router.replace(makeRunHref(activeRunId), { scroll: false });
+    }
+  }, [refining, activeRunId, routeRunId, makeRunHref, router]);
 
   const contextValue = useMemo(
     () => ({
@@ -179,6 +187,10 @@ export function RunResultsShell({
                 saveAction={pageConfig.saveAction ?? "workflow"}
                 variant="panel"
                 onRefined={(newRunId) => handleRefined(newRunId)}
+                onUsageLimit={(message) => {
+                  setUsageLimitMsg(message);
+                  setShowUsageLimit(true);
+                }}
               />
             ) : (
               <RefinePlaceholder running={refineDisabled} />
@@ -187,6 +199,11 @@ export function RunResultsShell({
         />
       </div>
       {children}
+      <UsageLimitModal
+        open={showUsageLimit}
+        onClose={() => setShowUsageLimit(false)}
+        message={usageLimitMsg}
+      />
     </RunResultsContext.Provider>
   );
 }

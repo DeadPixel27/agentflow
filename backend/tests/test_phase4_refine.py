@@ -382,3 +382,133 @@ async def test_refine_and_start_multi_field_uses_full_pipeline(monkeypatch):
     )
     assert child.status == "running"
     assert child.run_id == "run-child"
+
+
+@pytest.mark.asyncio
+async def test_apply_extract_prompt_fingerprint_matches_preview(monkeypatch):
+    """Apply re-extraction must use the same merge Preview uses."""
+    from app.services.pipeline.extraction_prompt import effective_preview_prompt
+    from app.services.pipeline.refine_logging import prompt_fingerprint
+
+    repo = MemoryRepository()
+    base_prompt = "Extract vendor and amount"
+    instruction = (
+        "years_of_experience: sum role durations including fractional years; "
+        "example on this resume is 2.25"
+    )
+    parent = RunResult(
+        run_id="run-parent",
+        upload_id="upload-1",
+        task_description="Extract invoice fields",
+        status="completed",
+        steps=[
+            StepRunRecord(
+                step_order=1,
+                agent_type="transform.field_extractor",
+                status="completed",
+            ),
+        ],
+        document_ids=["doc-1"],
+        planned_steps=[
+            PlannedStep(
+                step_order=1,
+                agent_type="transform.field_extractor",
+                config={"fields": ["vendor", "amount"]},
+                reason="extract",
+            ),
+        ],
+        cached_documents=[
+            {
+                "document_id": "doc-1",
+                "filename": "inv.pdf",
+                "text": "Vendor Acme Amount 1000",
+            }
+        ],
+        result={"rows": [{"document_id": "doc-1", "vendor": "Acme", "amount": 1000}]},
+        template_id="invoice",
+        extraction_prompt=base_prompt,
+    )
+    repo.save_run(parent)
+
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    parent = versions.attach_initial_run_version(
+        parent,
+        template_id="invoice",
+        planned_steps=parent.planned_steps,
+        extraction_prompt=base_prompt,
+    )
+    repo.save_run(parent)
+
+    generalized = (
+        "Extract vendor and amount\n\n"
+        "years_of_experience: sum durations of all work_experience roles "
+        "as fractional years. Do not use calendar span from earliest start."
+    )
+
+    async def _fake_execute(self, ctx, config):
+        from app.agents.core.base import StepResult
+        from app.persistence.serialization import planned_steps_to_json
+
+        steps = ctx.data["current_steps"]
+        return StepResult(
+            output={
+                "summary": "Updated years calculation.",
+                "extraction_prompt": generalized,
+                "planned_steps": planned_steps_to_json(steps),
+            }
+        )
+
+    captured: dict = {}
+
+    async def _fake_start(upload_id, steps, *args, **kwargs):
+        captured["extraction_prompt"] = kwargs.get("extraction_prompt")
+        return RunResult(
+            run_id="run-child",
+            upload_id=upload_id,
+            task_description="Extract invoice fields",
+            status="running",
+            steps=[],
+            planned_steps=steps,
+            parent_run_id=parent.run_id,
+            template_id=parent.template_id,
+            extraction_prompt=kwargs.get("extraction_prompt"),
+            cached_documents=kwargs.get("cached_documents"),
+            refine_summary=kwargs.get("refine_summary"),
+        )
+
+    monkeypatch.setattr(
+        "app.agents.handlers.transforms.pipeline_refiner.PipelineRefinerHandler.execute",
+        _fake_execute,
+    )
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_service.start_run",
+        _fake_start,
+    )
+
+    service = RefineService(repo, versions)
+    child, _summary = await service.refine_and_start(parent.run_id, instruction)
+
+    preview_prompt = effective_preview_prompt(base_prompt, instruction)
+    assert captured["extraction_prompt"] == preview_prompt
+    assert prompt_fingerprint(captured["extraction_prompt"]) == prompt_fingerprint(
+        preview_prompt
+    )
+    assert child.extraction_prompt == preview_prompt
+
+    stored = versions.get_version_payload(child.current_template_version_id)
+    assert stored.extraction_prompt == preview_prompt
+    assert stored.generalized_prompt == generalized
+    assert "2.25" not in (stored.generalized_prompt or "")
+
+    # The runner resolves through the version pointer, so that path must also
+    # yield the preview prompt — otherwise the child executes something else.
+    _resolved_steps, resolved_prompt = versions.resolve_run_plan(child)
+    assert resolved_prompt == preview_prompt
+
+    # Save Workflow must pick up the generalized rules instead.
+    workflow_version = versions.copy_run_version_to_workflow(
+        run_version_id=child.current_template_version_id,
+        workflow_id="wf-1",
+    )
+    saved = versions.get_version_payload(workflow_version.version_id)
+    assert saved.extraction_prompt == generalized

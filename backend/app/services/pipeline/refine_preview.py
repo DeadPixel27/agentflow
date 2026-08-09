@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from app.models.domain.run import RunResult
 from app.services.extraction.field_extractor import DocumentInput, extract_fields
-from app.services.pipeline.extraction_prompt import merge_prompt_addition
+from app.services.pipeline.extraction_prompt import effective_preview_prompt
 from app.services.pipeline.refine_logging import (
     log_field_snapshot,
     log_preview_diff,
@@ -107,8 +107,8 @@ async def preview_refinement(
 
     Returns rows with before/after per field for UI preview when ready to Apply.
 
-    NOTE: Preview uses merge(base_prompt, accumulated_instruction) directly.
-    Apply (/refine) runs the pipeline refiner first — prompts may differ.
+    NOTE: Preview and Apply re-extraction both use effective_preview_prompt.
+    Apply also runs the pipeline refiner to store a generalized prompt for Save Workflow.
     """
     instruction = accumulated_instruction.strip()
     if not instruction:
@@ -127,7 +127,7 @@ async def preview_refinement(
         return []
 
     planned_steps, base_prompt = versions.resolve_run_plan(run)
-    preview_prompt = merge_prompt_addition(base_prompt, instruction)
+    preview_prompt = effective_preview_prompt(base_prompt, instruction)
     fields = _field_names_from_steps(planned_steps)
 
     log_prompt(

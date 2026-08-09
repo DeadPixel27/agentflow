@@ -38,6 +38,9 @@ class UserTemplateVersionPayload:
     parent_version_id: Optional[str] = None
     user_message: Optional[str] = None
     created_at: Optional[str] = None
+    # Reusable rules for Save Workflow. extraction_prompt stays the exact text
+    # this version ran with, so results stay reproducible.
+    generalized_prompt: Optional[str] = None
 
 
 @dataclass
