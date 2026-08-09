@@ -185,6 +185,33 @@ Templates set defaults; user overrides on results page:
 - **Version runs** — `parent_run_id` column for lineage
 - **Rate limit** refine endpoint same as ad-hoc
 
+---
+
+## Follow-up — derived numeric fields are computed by the LLM
+
+Refine Apply now matches Preview, and the extractor is given `today` so
+relative dates ("Present", "Current") resolve correctly. What remains is that
+multi-step arithmetic is still done by the model.
+
+Measured on a two-role resume with the generalized prompt alone:
+
+| | `years_of_experience` |
+|---|---|
+| Before `today` was injected | 0.42 |
+| After `today` was injected | 2.11 |
+| Correct (sum of both roles) | ~2.44 |
+
+The model resolves each date correctly but silently drops a role when summing,
+so the answer is plausible and wrong — the worst failure mode for a user who
+came to the chat to fix exactly this number.
+
+**Fix:** compute derived numeric fields in Python from already-extracted
+structured data. `work_experience` comes back with correct `start_date` /
+`end_date` per role, so `years_of_experience` needs no LLM at all. Same pattern
+applies to any total, count, or duration field.
+
+Reproduce with `backend/scripts/verify_generalized_prompt.py <run_id>`.
+
 **Effort:** 4–6 hours (API + chat UI + cached text storage)  
 **Version:** V1.3 — after template library and deploy
 

@@ -13,7 +13,10 @@ from app.models.domain.run import RunResult, StepRunRecord
 from app.persistence.protocols import DataRepository
 from app.persistence.serialization import planned_steps_from_json
 from app.services.documents.upload_loader import load_upload_documents
-from app.services.pipeline.extraction_prompt import merge_prompt_addition, sync_prompt_to_steps
+from app.services.pipeline.extraction_prompt import (
+    effective_preview_prompt,
+    sync_prompt_to_steps,
+)
 from app.services.pipeline.pipeline_refiner import RefinerError
 from app.services.pipeline.refine_logging import log_prompt, prompt_fingerprint
 from app.services.pipeline.runner import start_run
@@ -138,8 +141,10 @@ class RefineService:
         output = result.output
         new_steps = planned_steps_from_json(output.get("planned_steps"))
         summary = str(output.get("summary", "Pipeline updated.")).strip()
+        feedback = message.strip()
+        # Re-extract with the same prompt Preview used so Apply results match.
+        extract_prompt = effective_preview_prompt(base_prompt, feedback)
         refiner_prompt = str(output.get("extraction_prompt") or base_prompt).strip()
-        new_prompt = refiner_prompt
         used_fallback_merge = False
 
         log_prompt(
@@ -156,56 +161,62 @@ class RefineService:
             },
         )
 
-        # Only use raw feedback as fallback when the refiner returned nothing new.
-        # Do NOT merge raw user text into the prompt — it contains document-specific
-        # values (e.g. "should be 2.5 years") that poison extraction of other documents.
-        if not new_prompt or new_prompt.strip() == base_prompt.strip():
-            feedback = message.strip()
-            if feedback:
-                used_fallback_merge = True
-                new_prompt = merge_prompt_addition(base_prompt, feedback)
-                if summary == "Pipeline updated.":
-                    summary = "Updated extraction instructions from your feedback."
-                log_prompt(
-                    logger,
-                    "apply",
-                    run_id=parent.run_id,
-                    label="fallback_merged_prompt",
-                    prompt=new_prompt,
-                    extra={"reason": "refiner returned unchanged prompt"},
-                )
+        # Persist a reusable generalized prompt for Save Workflow.
+        # Fall back to the preview merge only when the refiner returned nothing new.
+        if refiner_prompt and refiner_prompt.strip() != base_prompt.strip():
+            stored_prompt = refiner_prompt
         else:
-            feedback = message.strip()
+            used_fallback_merge = bool(feedback)
+            stored_prompt = extract_prompt if feedback else base_prompt
+            if used_fallback_merge and summary == "Pipeline updated.":
+                summary = "Updated extraction instructions from your feedback."
+            log_prompt(
+                logger,
+                "apply",
+                run_id=parent.run_id,
+                label="fallback_merged_prompt",
+                prompt=stored_prompt,
+                extra={"reason": "refiner returned unchanged prompt"},
+            )
 
-        preview_fp = prompt_fingerprint(
-            merge_prompt_addition(base_prompt, message.strip())
-        )
-        apply_fp = prompt_fingerprint(new_prompt)
+        extract_fp = prompt_fingerprint(extract_prompt)
+        stored_fp = prompt_fingerprint(stored_prompt)
         log_prompt(
             logger,
             "apply",
             run_id=parent.run_id,
-            label="final_apply_prompt",
-            prompt=new_prompt,
-            extra={"used_fallback_merge": used_fallback_merge},
+            label="extract_prompt",
+            prompt=extract_prompt,
+            extra={"fp": extract_fp},
         )
-        if preview_fp != apply_fp:
-            logger.warning(
-                "[refine] PROMPT MISMATCH parent_run_id=%s preview_would_use_fp=%s "
-                "apply_uses_fp=%s — preview merges accumulated_instruction directly; "
-                "apply uses refiner output. Values may differ (e.g. years_of_experience).",
+        log_prompt(
+            logger,
+            "apply",
+            run_id=parent.run_id,
+            label="stored_prompt",
+            prompt=stored_prompt,
+            extra={
+                "used_fallback_merge": used_fallback_merge,
+                "fp": stored_fp,
+            },
+        )
+        if extract_fp != stored_fp:
+            logger.info(
+                "[refine] extract vs generalized prompt differ parent_run_id=%s "
+                "extract_fp=%s generalized_fp=%s — expected: extract matches Preview; "
+                "generalized is reused by Save Workflow.",
                 parent.run_id,
-                preview_fp,
-                apply_fp,
+                extract_fp,
+                stored_fp,
             )
         else:
             logger.info(
-                "[refine] prompt match parent_run_id=%s fp=%s",
+                "[refine] extract and generalized prompts match parent_run_id=%s fp=%s",
                 parent.run_id,
-                apply_fp,
+                extract_fp,
             )
 
-        new_steps = sync_prompt_to_steps(new_steps, new_prompt)
+        extract_steps = sync_prompt_to_steps(new_steps, extract_prompt)
 
         cached_documents = parent.cached_documents
         if not cached_documents:
@@ -216,7 +227,7 @@ class RefineService:
         # re-extract just that field (5x cheaper, same accuracy)
         from app.services.pipeline.refine_preview import _infer_target_fields
 
-        all_fields = _field_names_from_steps(new_steps) or _field_names_from_result(
+        all_fields = _field_names_from_steps(extract_steps) or _field_names_from_result(
             parent.result
         )
         target_fields = _infer_target_fields(
@@ -233,8 +244,9 @@ class RefineService:
         ):
             child = await self._targeted_field_refine(
                 parent=parent,
-                new_steps=new_steps,
-                new_prompt=new_prompt,
+                extract_steps=extract_steps,
+                extract_prompt=extract_prompt,
+                generalized_prompt=stored_prompt,
                 cached_documents=cached_documents,
                 summary=summary,
                 feedback=feedback,
@@ -244,12 +256,12 @@ class RefineService:
 
         child = await start_run(
             parent.upload_id,
-            new_steps,
+            extract_steps,
             parent.task_description,
             workflow_id=parent.workflow_id,
             parent_run_id=parent.run_id,
             template_id=parent.template_id,
-            extraction_prompt=new_prompt,
+            extraction_prompt=extract_prompt,
             cached_documents=cached_documents,
             refine_summary=summary,
             user_id=parent.user_id,
@@ -266,8 +278,9 @@ class RefineService:
             version = self._versions.create_run_version(
                 scope_id=child.run_id,
                 template_id=parent.template_id,
-                planned_steps=new_steps,
-                extraction_prompt=new_prompt,
+                planned_steps=extract_steps,
+                extraction_prompt=extract_prompt,
+                generalized_prompt=stored_prompt,
                 refine_summary=summary,
                 parent_version_id=parent.current_template_version_id,
                 user_message=feedback or None,
@@ -290,8 +303,9 @@ class RefineService:
         self,
         *,
         parent: RunResult,
-        new_steps: list[PlannedStep],
-        new_prompt: str,
+        extract_steps: list[PlannedStep],
+        extract_prompt: str,
+        generalized_prompt: str,
         cached_documents: list[dict[str, Any]],
         summary: str,
         feedback: str,
@@ -341,7 +355,7 @@ class RefineService:
                     filename=str(doc.get("filename", "")),
                 ),
                 target_field,
-                instructions=new_prompt,
+                instructions=extract_prompt,
             )
 
             updated_row = dict(row)
@@ -384,14 +398,14 @@ class RefineService:
                     if step.agent_type == "transform.field_extractor"
                     else {"skipped": True, "reason": "targeted_reextraction"},
                 )
-                for step in new_steps
+                for step in extract_steps
             ],
             document_ids=list(parent.document_ids),
-            planned_steps=new_steps,
+            planned_steps=extract_steps,
             workflow_id=parent.workflow_id,
             parent_run_id=parent.run_id,
             template_id=parent.template_id,
-            extraction_prompt=new_prompt,
+            extraction_prompt=extract_prompt,
             cached_documents=cached_documents,
             refine_summary=summary,
             result=updated_result,
@@ -402,8 +416,9 @@ class RefineService:
             version = self._versions.create_run_version(
                 scope_id=child.run_id,
                 template_id=parent.template_id,
-                planned_steps=new_steps,
-                extraction_prompt=new_prompt,
+                planned_steps=extract_steps,
+                extraction_prompt=extract_prompt,
+                generalized_prompt=generalized_prompt,
                 refine_summary=summary,
                 parent_version_id=parent.current_template_version_id,
                 user_message=feedback or None,

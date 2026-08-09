@@ -40,6 +40,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // ignore
     }
+
+    // Auto-redirect to sign-in on 401 (expired/invalid token)
+    if (res.status === 401 && typeof window !== "undefined") {
+      clearAccessToken();
+      localStorage.removeItem("agentflow_user_id");
+      localStorage.removeItem("agentflow_user_name");
+      localStorage.removeItem("agentflow_user_email");
+      window.location.href = "/account";
+      throw new ApiError("Session expired. Please sign in again.", 401);
+    }
+
     throw new ApiError(String(detail), res.status);
   }
   return res.json() as Promise<T>;
@@ -71,6 +82,7 @@ export interface UploadedDocumentSummary {
   document_id: string;
   filename: string;
   file_type: string;
+  extraction_method?: string;
 }
 
 export interface UploadDocumentsResponse {
@@ -118,11 +130,23 @@ export interface TemplateListResponse {
   count: number;
 }
 
+export interface FieldConfidence {
+  [fieldName: string]: number; // 0.0 to 1.0
+}
+
+export interface ValidationWarning {
+  field: string;
+  message: string;
+  severity: "warning" | "error";
+}
+
 export interface RunResult {
   format?: string;
   content?: string;
   rows?: Record<string, unknown>[];
   row_count?: number;
+  field_confidence?: Record<string, FieldConfidence>;
+  validation_warnings?: Record<string, ValidationWarning[]>;
 }
 
 export interface RunResponse {
@@ -449,8 +473,14 @@ export async function updateWorkflowFromRun(
 }
 
 export async function deleteWorkflow(workflowId: string): Promise<void> {
+  const headers = new Headers();
+  const token = getAccessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   const res = await fetch(`${API_BASE}/api/workflows/${workflowId}`, {
     method: "DELETE",
+    headers,
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -459,6 +489,14 @@ export async function deleteWorkflow(workflowId: string): Promise<void> {
       detail = body.detail ?? JSON.stringify(body);
     } catch {
       // ignore
+    }
+    if (res.status === 401 && typeof window !== "undefined") {
+      clearAccessToken();
+      localStorage.removeItem("agentflow_user_id");
+      localStorage.removeItem("agentflow_user_name");
+      localStorage.removeItem("agentflow_user_email");
+      window.location.href = "/account";
+      throw new ApiError("Session expired. Please sign in again.", 401);
     }
     throw new ApiError(String(detail), res.status);
   }
@@ -485,6 +523,37 @@ export async function pushToSheets(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, sheet_name: sheetName }),
+  });
+}
+
+// --- Usage types ---
+
+export interface UsageSummary {
+  pages_used: number;
+  pages_limit: number;
+  resets_at: string | null;
+}
+
+export async function getUserUsage(): Promise<UsageSummary> {
+  return request<UsageSummary>("/api/users/me/usage");
+}
+
+// --- Waitlist types ---
+
+export interface WaitlistResponse {
+  message: string;
+  already_joined: boolean;
+}
+
+export async function joinWaitlist(
+  email: string,
+  name: string = "",
+  source: string = "pricing_page",
+): Promise<WaitlistResponse> {
+  return request<WaitlistResponse>("/api/waitlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name, source }),
   });
 }
 

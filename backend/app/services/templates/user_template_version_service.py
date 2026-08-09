@@ -63,6 +63,7 @@ class UserTemplateVersionService:
         refine_summary: str = "Initial (from template)",
         parent_version_id: Optional[str] = None,
         user_message: Optional[str] = None,
+        generalized_prompt: Optional[str] = None,
     ) -> UserTemplateVersionRecord:
         return self._create_version(
             scope_type="run",
@@ -73,6 +74,7 @@ class UserTemplateVersionService:
             refine_summary=refine_summary,
             parent_version_id=parent_version_id,
             user_message=user_message,
+            generalized_prompt=generalized_prompt,
         )
 
     def create_workflow_version(
@@ -114,6 +116,7 @@ class UserTemplateVersionService:
             extraction_prompt=source.extraction_prompt,
             refine_summary=refine_summary,
             parent_version_id=source_version_id,
+            generalized_prompt=source.generalized_prompt,
         )
 
     def copy_run_version_to_workflow(
@@ -124,11 +127,15 @@ class UserTemplateVersionService:
         refine_summary: str = "Saved from run",
     ) -> UserTemplateVersionRecord:
         source = self.get_version_payload(run_version_id)
+        # A saved workflow runs on future documents, so it must use the
+        # generalized rules — not the text tailored to the refined run.
+        reusable_prompt = source.generalized_prompt or source.extraction_prompt
+        steps = planned_steps_from_json(source.planned_steps)
         return self.create_workflow_version(
             scope_id=workflow_id,
             template_id=source.template_id,
-            planned_steps=planned_steps_from_json(source.planned_steps),
-            extraction_prompt=source.extraction_prompt,
+            planned_steps=sync_prompt_to_steps(steps, reusable_prompt),
+            extraction_prompt=reusable_prompt,
             refine_summary=refine_summary,
             parent_version_id=run_version_id,
         )
@@ -266,6 +273,7 @@ class UserTemplateVersionService:
             parent_version_id=record.parent_version_id,
             user_message=raw.get("user_message"),
             created_at=record.created_at,
+            generalized_prompt=(str(raw.get("generalized_prompt") or "").strip() or None),
         )
 
     def resolve_run_plan(self, run: RunResult) -> tuple[list[PlannedStep], str]:
@@ -370,6 +378,7 @@ class UserTemplateVersionService:
         refine_summary: str,
         parent_version_id: Optional[str] = None,
         user_message: Optional[str] = None,
+        generalized_prompt: Optional[str] = None,
     ) -> UserTemplateVersionRecord:
         version_id = str(uuid.uuid4())
         existing = self._repo.list_template_versions(scope_type, scope_id)
@@ -385,6 +394,7 @@ class UserTemplateVersionService:
             "scope_id": scope_id,
             "template_id": template_id,
             "extraction_prompt": prompt,
+            "generalized_prompt": (generalized_prompt or "").strip() or None,
             "planned_steps": steps_json,
             "refine_summary": refine_summary,
             "parent_version_id": parent_version_id,

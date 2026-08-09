@@ -55,3 +55,12 @@ def merge_prompt_addition(base_prompt: str, addition: str) -> str:
     if not base:
         return extra
     return f"{base}\n\n{extra}"
+
+
+def effective_preview_prompt(base_prompt: str, instruction: str) -> str:
+    """
+    Prompt used for Refine Preview and Apply re-extraction.
+
+    Must stay identical in preview and apply so results match.
+    """
+    return merge_prompt_addition(base_prompt, instruction)

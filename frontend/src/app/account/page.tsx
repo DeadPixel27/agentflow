@@ -1,15 +1,16 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
-import { ApiError } from "@/lib/api";
+import { ApiError, getUserUsage, type UsageSummary } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { clearStoredUser, signInUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ function AccountCard({
 }
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number }) {
-  const pct = Math.min(100, Math.round((used / limit) * 100));
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const warning = pct >= 80;
   return (
     <div className="space-y-1.5">
@@ -78,6 +79,17 @@ export default function AccountPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      getUserUsage()
+        .then(setUsage)
+        .catch(() => {
+          /* silent fail - show defaults */
+        });
+    }
+  }, [user]);
 
   function handleSignOut() {
     clearStoredUser();
@@ -169,18 +181,34 @@ export default function AccountPage() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="font-semibold text-sm">Free Plan</p>
-                <p className="text-xs text-muted-foreground">Resets Aug 31</p>
+                <p className="text-xs text-muted-foreground">
+                  {usage?.resets_at
+                    ? `Resets ${new Date(usage.resets_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                    : "50 pages/month"}
+                </p>
               </div>
-              <Button size="sm" variant="outline" disabled>
-                Upgrade →
-              </Button>
+              <Link href="/pricing">
+                <Button size="sm" variant="outline">
+                  Upgrade →
+                </Button>
+              </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <UsageBar label="Pipeline runs" used={72} limit={100} />
-              <UsageBar label="Documents" used={214} limit={500} />
-              <UsageBar label="Workflows" used={4} limit={5} />
-              <UsageBar label="Emails" used={18} limit={50} />
+            <div className="pt-2">
+              <UsageBar
+                label="Pages extracted"
+                used={usage?.pages_used ?? 0}
+                limit={usage?.pages_limit ?? 50}
+              />
             </div>
+            {usage && usage.pages_used >= usage.pages_limit && (
+              <p className="text-xs text-amber-600 font-medium">
+                You&apos;ve hit your free limit.{" "}
+                <Link href="/pricing" className="underline">
+                  Join the Pro waitlist
+                </Link>{" "}
+                for unlimited access.
+              </p>
+            )}
           </AccountCard>
 
           <AccountCard title="Profile">

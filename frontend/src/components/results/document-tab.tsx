@@ -5,16 +5,42 @@ import { useState } from "react";
 
 import { inputDocumentUrl } from "@/lib/api";
 
+function ExtractionMethodBadge({ method }: { method?: string }) {
+  if (!method) return null;
+
+  const config: Record<string, { label: string; color: string }> = {
+    pymupdf: { label: "Digital PDF", color: "bg-blue-100 text-blue-700" },
+    tesseract: { label: "OCR (Tesseract)", color: "bg-slate-100 text-slate-700" },
+    rapidocr: { label: "OCR (RapidOCR)", color: "bg-indigo-100 text-indigo-700" },
+    docling: { label: "Layout-Aware", color: "bg-purple-100 text-purple-700" },
+  };
+
+  const { label, color } = config[method] ?? {
+    label: method,
+    color: "bg-slate-100 text-slate-600",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${color}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 interface DocumentTabPanelProps {
   uploadId: string;
   documentId: string;
   filename: string;
+  extractionMethod?: string;
 }
 
 export function DocumentTabPanel({
   uploadId,
   documentId,
   filename,
+  extractionMethod,
 }: DocumentTabPanelProps) {
   const [page, setPage] = useState(1);
   const totalPages = 2;
@@ -24,9 +50,12 @@ export function DocumentTabPanel({
     <div className="flex flex-1 flex-col min-h-0 bg-[#F5F5F4]">
       <div className="flex-1 overflow-auto p-6 flex justify-center">
         <div className="w-full max-w-[480px] rounded-lg bg-white shadow-md p-8 space-y-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            {filename}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide truncate">
+              {filename}
+            </p>
+            <ExtractionMethodBadge method={extractionMethod} />
+          </div>
           <div className="space-y-3 text-sm leading-relaxed text-foreground/90">
             <p>
               Sample extracted preview. Fields like{" "}

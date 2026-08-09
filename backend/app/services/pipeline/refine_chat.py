@@ -40,20 +40,22 @@ User: "years of experience is wrong, should be ~2 years"
 You: {"ready": false, "message": "Got it — years_of_experience looks off. What rule should we use to calculate it?", "planned_changes": ["Fix years_of_experience calculation"], "accumulated_instruction": ""}
 
 User: "2 years — they've worked at BNY since July 2024"
-You: {"ready": true, "message": "Ready to apply: recalculate years_of_experience from employment start date (July 2024). Click Apply to re-run.", "planned_changes": ["Recalculate years_of_experience from BNY start date July 2024"], "accumulated_instruction": "Add extraction rule for years_of_experience: calculate total professional years from work_experience entries. For current role at BNY starting July 2024, count from that start date to today (~2 years). Do not use education dates. Return a numeric value."}
+You: {"ready": true, "message": "Ready to apply: recalculate years_of_experience by summing role durations. Click Apply to re-run.", "planned_changes": ["Recalculate years_of_experience by summing role durations"], "accumulated_instruction": "years_of_experience: sum the duration of every entry in work_experience, including internships. For each role, duration_years = (end_date - start_date) / 365.25, using today's date when end_date is Present. Add the role durations together; do not use the calendar span from earliest start to latest end, and do not use education dates. Return a decimal number rounded to 2 places."}
 
 RULES:
 - Keep responses under 3 sentences
 - Reference actual field names and sample values from the context
 - Accumulate changes across multiple messages — don't reset
-- When ready=true, write accumulated_instruction as a detailed, unambiguous instruction for a pipeline editor. This instruction must be self-contained — the pipeline editor will NOT see the chat history
+- accumulated_instruction is appended verbatim to the extraction prompt used on the documents. Write it as a direct extraction rule addressed to the extractor
+- accumulated_instruction must be self-contained (the extractor never sees the chat history), must state HOW to compute or normalize the field, and must NOT contain the user's specific answer, company names, or arithmetic from one document
+- Never write meta-commentary in accumulated_instruction (no "update the pipeline", "the user said", "add reusable rules")
 
 OUTPUT FORMAT (JSON):
 If still clarifying:
 {"ready": false, "message": "your response", "planned_changes": ["change 1", "change 2"], "accumulated_instruction": ""}
 
 If ready to apply:
-{"ready": true, "message": "Ready to apply: [summary]. Click Apply to re-run.", "planned_changes": ["change 1"], "accumulated_instruction": "Detailed instruction for the pipeline editor: ..."}
+{"ready": true, "message": "Ready to apply: [summary]. Click Apply to re-run.", "planned_changes": ["change 1"], "accumulated_instruction": "field_name: general rule describing how to compute or normalize the value."}
 """
 
 _CLARIFY_MARKERS = (
@@ -154,14 +156,12 @@ def _build_accumulated_instruction(
 ) -> str:
     user_context = _collect_user_context(chat_history, latest_message)
     changes = "; ".join(planned_changes) if planned_changes else user_context
-    fields_hint = ", ".join(field_names[:12]) if field_names else "relevant fields"
+    # Appended verbatim to the extraction prompt, so it must read as an
+    # extraction rule rather than an instruction to edit the pipeline.
     return (
-        "Update the extraction pipeline based on this user feedback. "
-        f"User said: {user_context}. "
-        f"Planned changes: {changes}. "
-        f"Fields in results: {fields_hint}. "
-        "Add reusable extraction_prompt rules (general, not document-specific) "
-        "so future runs extract correctly. Do not hardcode one document's values."
+        f"Apply this correction when extracting: {changes}. "
+        f"User's description of the correct behaviour: {user_context}. "
+        "Follow the described method rather than copying any example value."
     )
 
 

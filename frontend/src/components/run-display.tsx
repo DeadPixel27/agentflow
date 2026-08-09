@@ -1,11 +1,16 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, Circle, Loader2, SkipForward, XCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Circle, Loader2, SkipForward, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import type { PlannedStep, StepRun } from "@/lib/api";
+import type {
+  FieldConfidence,
+  PlannedStep,
+  StepRun,
+  ValidationWarning,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface StepStatusListProps {
@@ -231,9 +236,62 @@ export function StepStatusList({
 
 interface ResultsTableProps {
   rows: Record<string, unknown>[];
+  fieldConfidence?: Record<string, FieldConfidence>;
+  validationWarnings?: Record<string, ValidationWarning[]>;
 }
 
-export function ResultsTable({ rows }: ResultsTableProps) {
+function ConfidenceBadge({ score }: { score?: number }) {
+  if (score === undefined || score === null) return null;
+
+  const pct = Math.round(score * 100);
+  let color: string;
+
+  if (score >= 0.9) {
+    color = "bg-emerald-100 text-emerald-700 border-emerald-200";
+  } else if (score >= 0.7) {
+    color = "bg-amber-100 text-amber-700 border-amber-200";
+  } else {
+    color = "bg-red-100 text-red-700 border-red-200";
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${color}`}
+      title={`Confidence: ${pct}%`}
+    >
+      {pct}%
+    </span>
+  );
+}
+
+function FieldWarningIcon({
+  warnings,
+  fieldName,
+}: {
+  warnings?: ValidationWarning[];
+  fieldName: string;
+}) {
+  if (!warnings?.length) return null;
+  const fieldWarnings = warnings.filter((w) => w.field === fieldName);
+  if (fieldWarnings.length === 0) return null;
+
+  const isError = fieldWarnings.some((w) => w.severity === "error");
+  const Icon = isError ? AlertCircle : AlertTriangle;
+  const color = isError ? "text-red-500" : "text-amber-500";
+  const title = fieldWarnings.map((w) => w.message).join(" · ");
+
+  return (
+    <span title={title} aria-label={title} className="inline-flex">
+      <Icon className={`h-3.5 w-3.5 ${color} ml-1 shrink-0`} />
+    </span>
+  );
+}
+
+export function ResultsTable({
+  rows,
+  fieldConfidence,
+  validationWarnings,
+}: ResultsTableProps) {
   if (!rows.length) {
     return (
       <p className="text-sm text-muted-foreground text-center py-8">
@@ -260,15 +318,33 @@ export function ResultsTable({ rows }: ResultsTableProps) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-b last:border-0">
-              {columns.map((col) => (
-                <td key={col} className="px-4 py-2 max-w-xs truncate">
-                  {formatCell(row[col])}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const docId =
+              typeof row.document_id === "string" ? row.document_id : undefined;
+            const confidence = docId ? fieldConfidence?.[docId] : undefined;
+            const warnings = docId ? validationWarnings?.[docId] : undefined;
+
+            return (
+              <tr key={i} className="border-b last:border-0">
+                {columns.map((col) => (
+                  <td key={col} className="px-4 py-2 max-w-xs">
+                    <span className="inline-flex items-center gap-1.5 max-w-full">
+                      <span className="truncate">{formatCell(row[col])}</span>
+                      {col !== "document_id" && col !== "filename" && (
+                        <>
+                          <ConfidenceBadge score={confidence?.[col]} />
+                          <FieldWarningIcon
+                            warnings={warnings}
+                            fieldName={col}
+                          />
+                        </>
+                      )}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

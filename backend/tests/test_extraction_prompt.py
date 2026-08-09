@@ -2,6 +2,7 @@
 
 from app.models.domain.pipeline import PlannedStep
 from app.services.pipeline.extraction_prompt import (
+    effective_preview_prompt,
     merge_prompt_addition,
     read_prompt_from_steps,
     resolve_run_extraction_prompt,
@@ -38,6 +39,14 @@ def test_merge_prompt_addition_appends_generic_rule_only():
 def test_merge_prompt_addition_skips_duplicate():
     base = "rule one\n\nrule two"
     assert merge_prompt_addition(base, "rule two") == base
+
+
+def test_effective_preview_prompt_matches_merge():
+    base = "Extract years_of_experience from work history"
+    instruction = "Sum each role duration; return fractional years."
+    assert effective_preview_prompt(base, instruction) == merge_prompt_addition(
+        base, instruction
+    )
 
 
 def test_resolve_run_extraction_prompt_prefers_stored_value():

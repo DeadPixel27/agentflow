@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowRight, Loader2, X } from "lucide-react";
+import { ArrowRight, Loader2, Play, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { UploadZone } from "@/components/upload-zone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +20,6 @@ import {
 import { toastError } from "@/lib/toast";
 import { ensureUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 
 export default function HomePage() {
   const router = useRouter();
@@ -30,6 +31,8 @@ export default function HomePage() {
   const [templates, setTemplates] = useState<PipelineTemplateSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
+  const [showUsageLimit, setShowUsageLimit] = useState(false);
+  const [usageLimitMsg, setUsageLimitMsg] = useState("");
 
   useEffect(() => {
     listTemplates()
@@ -57,6 +60,58 @@ export default function HomePage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function handleApiError(err: unknown) {
+    if (err instanceof ApiError) {
+      switch (err.status) {
+        case 401:
+          break;
+        case 429:
+          setUsageLimitMsg(err.message);
+          setShowUsageLimit(true);
+          break;
+        case 503:
+          toastError(
+            "Service is temporarily at capacity. Please try again in a few minutes.",
+          );
+          break;
+        default:
+          toastError(err.message);
+      }
+    } else {
+      toastError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.",
+      );
+    }
+  }
+
+  async function handleTrySample() {
+    setLoading(true);
+    try {
+      await ensureUser();
+      setPhase("Loading sample…");
+      const response = await fetch("/samples/sample-invoice.pdf");
+      if (!response.ok) {
+        throw new Error("Sample invoice is missing.");
+      }
+      const blob = await response.blob();
+      const file = new File([blob], "sample-invoice.pdf", {
+        type: "application/pdf",
+      });
+      setPhase("Uploading sample…");
+      const upload = await uploadFiles([file]);
+      setPhase("Starting pipeline…");
+      const run = await runTemplate(upload.upload_id, "invoice");
+      router.push(`/results/${run.run_id}`);
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setLoading(false);
+      setPhase(null);
+    }
+  }
+
   async function handleRun() {
     if (!files.length) {
       toastError("Add at least one document.");
@@ -77,10 +132,8 @@ export default function HomePage() {
         ? await runTemplate(upload.upload_id, selectedTemplateId)
         : await runAdhoc(upload.upload_id, task.trim());
       router.push(`/results/${run.run_id}`);
-    } catch (e) {
-      toastError(
-        e instanceof ApiError ? e.message : "Something went wrong. Try again.",
-      );
+    } catch (err) {
+      handleApiError(err);
     } finally {
       setLoading(false);
       setPhase(null);
@@ -126,23 +179,37 @@ export default function HomePage() {
           )}
 
           {templates.length > 0 && (
-            <div className="flex flex-wrap gap-2 justify-center">
-              {templates.map((template) => (
-                <button
-                  key={template.template_id}
-                  type="button"
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 justify-center">
+                {templates.map((template) => (
+                  <button
+                    key={template.template_id}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void handleSelectTemplate(template.template_id)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-all",
+                      "border-border bg-card hover:border-primary hover:bg-primary/5",
+                      selectedTemplateId === template.template_id &&
+                        "border-primary bg-primary/10 text-primary",
+                    )}
+                  >
+                    {template.name}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleTrySample()}
                   disabled={loading}
-                  onClick={() => void handleSelectTemplate(template.template_id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-all",
-                    "border-border bg-card hover:border-primary hover:bg-primary/5",
-                    selectedTemplateId === template.template_id &&
-                      "border-primary bg-primary/10 text-primary",
-                  )}
+                  className="gap-2"
                 >
-                  {template.name}
-                </button>
-              ))}
+                  <Play className="h-4 w-4" />
+                  Try with sample invoice
+                </Button>
+              </div>
             </div>
           )}
 
@@ -188,6 +255,11 @@ export default function HomePage() {
           </p>
         </div>
       </main>
+      <UsageLimitModal
+        open={showUsageLimit}
+        onClose={() => setShowUsageLimit(false)}
+        message={usageLimitMsg}
+      />
     </div>
   );
 }

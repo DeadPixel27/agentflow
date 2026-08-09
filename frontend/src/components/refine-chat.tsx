@@ -81,6 +81,7 @@ interface RefineChatPanelProps {
   saveAction?: SaveAction;
   variant?: "card" | "panel";
   onRefined: (newRunId: string, summary: string) => void;
+  onUsageLimit?: (message: string) => void;
 }
 
 function RefineSaveDisclaimer({ saveAction }: { saveAction?: SaveAction }) {
@@ -120,6 +121,7 @@ export function RefineChatPanel({
   saveAction,
   variant = "card",
   onRefined,
+  onUsageLimit,
 }: RefineChatPanelProps) {
   const sessionKey = chatSessionKey ?? runId;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -129,21 +131,23 @@ export function RefineChatPanel({
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [readyToApply, setReadyToApply] = useState(false);
   const [accumulatedInstruction, setAccumulatedInstruction] = useState("");
-  const [preview, setPreview] = useState<RefinePreviewRow[]>([]);
 
   useEffect(() => {
     setHistory([]);
     setMessage("");
     setReadyToApply(false);
     setAccumulatedInstruction("");
-    setPreview([]);
   }, [sessionKey]);
 
   useEffect(() => {
     if (!loading && !applying && !disabled) {
-      textareaRef.current?.focus();
+      // Use requestAnimationFrame to ensure focus happens after DOM settles
+      // (Apply button rendering can steal focus on state change)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
     }
-  }, [loading, applying, disabled]);
+  }, [loading, applying, disabled, readyToApply, history.length]);
 
   async function handleSend() {
     const text = message.trim();
@@ -174,25 +178,33 @@ export function RefineChatPanel({
       if (result.ready && result.accumulated_instruction) {
         setReadyToApply(true);
         setAccumulatedInstruction(result.accumulated_instruction);
-        setPreview(result.preview ?? []);
       } else if (result.ready) {
         setReadyToApply(true);
         setAccumulatedInstruction(
           result.accumulated_instruction ||
             `Apply these refinements: ${(result.planned_changes || []).join("; ")}. User request: ${text}`,
         );
-        setPreview(result.preview ?? []);
       } else {
         setReadyToApply(false);
         setAccumulatedInstruction("");
-        setPreview([]);
       }
     } catch (e) {
-      toastError(e instanceof ApiError ? e.message : "Plan mode failed.");
+      if (e instanceof ApiError && e.status === 429) {
+        toastError(e.message);
+        onUsageLimit?.(e.message);
+      } else if (e instanceof ApiError && e.status === 503) {
+        toastError("Service is temporarily at capacity. Try again shortly.");
+      } else {
+        toastError(e instanceof ApiError ? e.message : "Plan mode failed.");
+      }
       setHistory((prev) => prev.slice(0, -1));
       setMessage(text);
     } finally {
       setLoading(false);
+      // Explicit refocus after all state updates settle
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
     }
   }
 
@@ -217,10 +229,16 @@ export function RefineChatPanel({
       });
       setReadyToApply(false);
       setAccumulatedInstruction("");
-      setPreview([]);
       onRefined(result.run.run_id, result.refine_summary);
     } catch (e) {
-      toastError(e instanceof ApiError ? e.message : "Refine failed.");
+      if (e instanceof ApiError && e.status === 429) {
+        toastError(e.message);
+        onUsageLimit?.(e.message);
+      } else if (e instanceof ApiError && e.status === 503) {
+        toastError("Service is temporarily at capacity. Try again shortly.");
+      } else {
+        toastError(e instanceof ApiError ? e.message : "Refine failed.");
+      }
       // Remove the "applying..." message
       setHistory((prev) => prev.slice(0, -1));
     } finally {
@@ -271,9 +289,6 @@ export function RefineChatPanel({
           )}
         </div>
       ))}
-      {readyToApply && preview.length > 0 && (
-        <PreviewPanel preview={preview} />
-      )}
     </div>
   );
 

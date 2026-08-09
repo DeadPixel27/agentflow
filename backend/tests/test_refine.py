@@ -271,6 +271,7 @@ def test_plan_refinement_forces_ready_when_user_answers_clarification():
 
 @pytest.mark.asyncio
 async def test_refine_and_start_merges_feedback_only_when_refiner_unchanged(monkeypatch):
+    from app.services.pipeline.extraction_prompt import effective_preview_prompt
     from app.services.pipeline.refine_service import RefineService
 
     repo = MemoryRepository()
@@ -315,12 +316,18 @@ async def test_refine_and_start_merges_feedback_only_when_refiner_unchanged(monk
 
     assert child.parent_run_id == parent.run_id
     assert child.current_template_version_id
+    expected = effective_preview_prompt("Extract name", feedback)
+    assert child.extraction_prompt == expected
     assert "July 2024" in (child.extraction_prompt or "")
+    stored = versions.get_version_payload(child.current_template_version_id)
+    assert stored.extraction_prompt == expected
     assert summary
 
 
 @pytest.mark.asyncio
 async def test_refine_and_start_does_not_poison_prompt_when_refiner_updates(monkeypatch):
+    from app.services.pipeline.extraction_prompt import effective_preview_prompt
+    from app.services.pipeline.refine_logging import prompt_fingerprint
     from app.services.pipeline.refine_service import RefineService
 
     repo = MemoryRepository()
@@ -341,6 +348,7 @@ async def test_refine_and_start_does_not_poison_prompt_when_refiner_updates(monk
         "years_of_experience: sum durations of all work_experience entries. "
         "For each role, calculate (end_date or today) minus start_date in years."
     )
+    generalized = f"Extract name\n\n{general_rule}"
 
     async def _fake_execute(self, ctx, config):
         from app.agents.core.base import StepResult
@@ -350,7 +358,7 @@ async def test_refine_and_start_does_not_poison_prompt_when_refiner_updates(monk
         return StepResult(
             output={
                 "summary": "Updated years_of_experience calculation rule.",
-                "extraction_prompt": f"Extract name\n\n{general_rule}",
+                "extraction_prompt": generalized,
                 "planned_steps": planned_steps_to_json(steps),
             }
         )
@@ -368,11 +376,23 @@ async def test_refine_and_start_does_not_poison_prompt_when_refiner_updates(monk
     )
     child, _summary = await service.refine_and_start(parent.run_id, feedback)
 
-    prompt = child.extraction_prompt or ""
-    assert general_rule in prompt
-    assert "BNY" not in prompt
-    assert "July 2024" not in prompt
-    assert "2 years" not in prompt
+    # Apply re-extract uses the same merge Preview would use.
+    preview_prompt = effective_preview_prompt("Extract name", feedback)
+    assert child.extraction_prompt == preview_prompt
+    assert prompt_fingerprint(child.extraction_prompt or "") == prompt_fingerprint(
+        preview_prompt
+    )
+
+    # The version replays what the child ran, so history stays reproducible.
+    stored = versions.get_version_payload(child.current_template_version_id)
+    assert stored.extraction_prompt == preview_prompt
+
+    # Save Workflow reuses the generalized refiner output (no doc-specific values).
+    assert stored.generalized_prompt == generalized
+    assert general_rule in (stored.generalized_prompt or "")
+    assert "BNY" not in (stored.generalized_prompt or "")
+    assert "July 2024" not in (stored.generalized_prompt or "")
+    assert "2 years" not in (stored.generalized_prompt or "")
 
 
 def test_plan_refinement_forces_ready_on_repeated_assistant_message():
