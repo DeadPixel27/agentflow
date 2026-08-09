@@ -7,7 +7,7 @@ JOB: Receive the HTTP request, delegate to upload_service, return the response.
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from app.api.dependencies import UploadServiceDep
+from app.api.dependencies import CurrentUserDep, UploadServiceDep
 from app.config import settings
 from app.models.api.upload import UploadResponse
 from app.models.domain.document import InvalidUploadError
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api", tags=["upload"])
 async def upload_documents(
     request: Request,
     upload_service: UploadServiceDep,
+    current_user: CurrentUserDep,
     files: list[UploadFile] = File(..., description="1-10 PDF or image files"),
 ) -> UploadResponse:
     try:

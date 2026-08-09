@@ -6,7 +6,7 @@ from typing import Any, Optional
 from app.agents.core.registry import get_agent_catalog
 from app.config import settings
 from app.models.domain.pipeline import PlannedStep
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
 from app.services.pipeline.step_parse import StepParseError, parse_planned_steps
 from app.validation.task_input import require_task_description
 
@@ -96,6 +96,7 @@ async def refine_pipeline(
         parsed = await complete_json(
             REFINE_SYSTEM_PROMPT,
             user_prompt,
+            task=LLMTask.REFINER,
             model=settings.groq_refiner_model,
         )
         steps = parse_planned_steps(parsed)

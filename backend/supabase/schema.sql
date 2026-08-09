@@ -35,6 +35,7 @@ create table if not exists workflow_steps (
 create table if not exists workflow_runs (
     id uuid primary key default gen_random_uuid(),
     workflow_id uuid references workflows(id) on delete set null,
+    user_id uuid references users(id) on delete set null,
     upload_id text not null,
     document_ids jsonb not null default '[]',
     task_description text not null default '',
@@ -67,6 +68,7 @@ create index if not exists idx_users_email on users(email);
 create index if not exists idx_workflows_user_id on workflows(user_id);
 create index if not exists idx_workflow_steps_workflow_id on workflow_steps(workflow_id);
 create index if not exists idx_workflow_runs_workflow_id on workflow_runs(workflow_id);
+create index if not exists idx_workflow_runs_user_id on workflow_runs(user_id);
 create index if not exists idx_workflow_step_runs_run_id on workflow_step_runs(run_id);
 
 -- Pipeline templates (editable catalog — seed via supabase/seed_templates.sql)
@@ -134,3 +136,47 @@ create table if not exists inbound_addresses (
 
 create index if not exists idx_inbound_addresses_user_id
     on inbound_addresses(user_id);
+
+-- Launch: usage metering, waitlist, analytics, admin flag
+create table if not exists usage_events (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id) on delete cascade,
+    pages int not null default 1,
+    template_id text,
+    run_id uuid references workflow_runs(id) on delete set null,
+    event_type text not null default 'extraction',
+    created_at timestamptz not null default now()
+);
+
+create index if not exists idx_usage_events_user_month
+    on usage_events(user_id, created_at);
+
+create table if not exists waitlist (
+    id uuid primary key default gen_random_uuid(),
+    email text not null,
+    name text not null default '',
+    source text not null default 'pricing_page',
+    created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_waitlist_email
+    on waitlist(email);
+
+create table if not exists analytics_events (
+    id uuid primary key default gen_random_uuid(),
+    event_type text not null,
+    user_id uuid references users(id) on delete set null,
+    template_id text,
+    run_id uuid references workflow_runs(id) on delete set null,
+    duration_ms int,
+    page_count int,
+    error text,
+    metadata jsonb not null default '{}',
+    created_at timestamptz not null default now()
+);
+
+create index if not exists idx_analytics_events_type_date
+    on analytics_events(event_type, created_at);
+
+alter table users add column if not exists is_admin boolean not null default false;
+

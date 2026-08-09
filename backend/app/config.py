@@ -44,6 +44,29 @@ class Settings(BaseSettings):
         "meta-llama/llama-4-scout-17b-16e-instruct,"
         "openai/gpt-oss-20b"
     )
+
+    # OpenAI — primary extraction model
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    # Comma-separated OpenAI fallbacks (Mini as fallback for cost savings)
+    openai_fallback_models: str = "gpt-4o-mini"
+
+    # JWT authentication
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expiry_hours: int = 72
+
+    # Usage limits
+    free_page_limit_monthly: int = 50
+    max_refines_per_run: int = 10
+    global_daily_page_limit: int = 500
+
+    # OCR engine — "tesseract" or "rapidocr"
+    ocr_engine: str = "rapidocr"
+
+    # Layout preservation — use Docling for digital PDFs
+    use_layout_preservation: bool = True
+
     admin_api_key: str = ""
 
     # User template version payloads: auto | local | supabase | aws_s3
@@ -102,6 +125,14 @@ class Settings(BaseSettings):
         return [
             model.strip()
             for model in self.groq_fallback_models.split(",")
+            if model.strip()
+        ]
+
+    @property
+    def openai_fallback_models_list(self) -> list[str]:
+        return [
+            model.strip()
+            for model in self.openai_fallback_models.split(",")
             if model.strip()
         ]
 

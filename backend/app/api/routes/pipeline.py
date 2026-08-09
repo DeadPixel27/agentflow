@@ -4,6 +4,7 @@ Pipeline Route — planner creates a step pipeline from task + upload.
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.dependencies import CurrentUserDep
 from app.config import settings
 from app.models.api.pipeline import (
     PipelineCreateRequest,
@@ -17,7 +18,10 @@ router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
 @router.post("/create", response_model=PipelineCreateResponse)
-async def create_pipeline(body: PipelineCreateRequest) -> PipelineCreateResponse:
+async def create_pipeline(
+    body: PipelineCreateRequest,
+    current_user: CurrentUserDep,
+) -> PipelineCreateResponse:
     """
     Plan a document processing pipeline from a task description and upload.
 

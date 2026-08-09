@@ -51,6 +51,11 @@ class MemoryRepository:
         runs = [run for run in self._runs.values() if run.workflow_id == workflow_id]
         return sorted(runs, key=lambda run: run.run_id, reverse=True)
 
+    def count_child_runs(self, parent_run_id: str) -> int:
+        return sum(
+            1 for run in self._runs.values() if run.parent_run_id == parent_run_id
+        )
+
     def save_workflow(self, workflow: WorkflowRecord) -> None:
         self._workflows[workflow.workflow_id] = strip_workflow_for_persist(workflow)
 

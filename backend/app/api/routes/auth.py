@@ -1,10 +1,11 @@
-"""Auth routes — sign in / register via configured auth provider."""
+"""Auth routes — sign in / register via configured auth provider. Returns JWT."""
 
 from fastapi import APIRouter, HTTPException
 
 from app.api.dependencies import AuthServiceDep
 from app.models.api.auth import SignInRequest, SignInResponse
 from app.models.api.users import UserResponse
+from app.services.auth.jwt import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -21,7 +22,7 @@ def _to_user_response(user) -> UserResponse:
 @router.post("/session", response_model=SignInResponse)
 async def create_session(body: SignInRequest, auth: AuthServiceDep) -> SignInResponse:
     """
-    Sign in or create an account.
+    Sign in or create an account. Returns user + JWT token.
 
     Users are matched by email in the database (Supabase when configured).
     Same email always returns the same user_id and workflows.
@@ -31,8 +32,11 @@ async def create_session(body: SignInRequest, auth: AuthServiceDep) -> SignInRes
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    token = create_access_token(user.user_id, user.email)
+
     return SignInResponse(
         user=_to_user_response(user),
         is_new_user=is_new,
         auth_provider=auth.provider_name,
+        token=token,
     )

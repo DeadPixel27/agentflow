@@ -13,6 +13,7 @@ from app.persistence.user_templates.local_repository import LocalUserTemplateRep
 from app.services.templates.user_template_version_service import UserTemplateVersionService
 from app.services.users.user_service import UserService
 from app.services.workflows.workflow_service import WorkflowService
+from tests.auth_helpers import override_current_user
 
 client = TestClient(app)
 
@@ -95,6 +96,7 @@ def _override(repo, versions, workflows):
     app.dependency_overrides[get_repo] = lambda: repo
     app.dependency_overrides[get_version_service] = lambda: versions
     app.dependency_overrides[get_workflow_service] = lambda: workflows
+    override_current_user()
 
 
 @pytest.fixture(autouse=True)
@@ -158,12 +160,20 @@ def test_workflow_run_seeds_run_scope_version(monkeypatch):
             )
         ]
 
+    async def _fake_usage(_user_id: str, _upload_id: str) -> int:
+        return 1
+
+    async def _noop_record(*_a, **_k):
+        return None
+
     monkeypatch.setattr(
         "app.services.pipeline.runner.load_upload_documents",
         _fake_load,
     )
     monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
     monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
+    monkeypatch.setattr("app.api.usage_http.enforce_upload_usage", _fake_usage)
+    monkeypatch.setattr("app.api.usage_http.record_run_usage", _noop_record)
     _override(repo, versions, workflows)
 
     response = client.post(

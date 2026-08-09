@@ -6,7 +6,8 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
-from app.api.dependencies import WorkflowServiceDep
+from app.api.dependencies import CurrentUserDep, WorkflowServiceDep
+from app.api.ownership import require_self, require_workflow_owner
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
 from app.models.api.runs import RunResponse
@@ -59,11 +60,13 @@ def _to_workflow_response(workflow, *, current_version_number: Optional[int] = N
 async def save_workflow(
     body: WorkflowCreateRequest,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> WorkflowResponse:
     """Save a plan as a reusable workflow template."""
+    require_self(current_user, body.user_id)
     try:
         workflow = workflows.create_workflow(
-            body.user_id,
+            current_user.user_id,
             body.name,
             to_planned_steps(body.steps),
             description=body.description,
@@ -83,11 +86,13 @@ async def save_workflow_from_run(
     run_id: str,
     body: WorkflowFromRunRequest,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> WorkflowResponse:
     """Save the plan from a prior run (e.g. after POST /api/runs/adhoc)."""
+    require_self(current_user, body.user_id)
     try:
         workflow = workflows.create_workflow_from_run(
-            body.user_id,
+            current_user.user_id,
             run_id,
             body.name,
             description=body.description,
@@ -105,14 +110,14 @@ async def save_workflow_from_run(
 @router.get("", response_model=list[WorkflowSummaryResponse])
 async def list_workflows(
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
     user_id: Optional[str] = Query(default=None, description="Filter by owner"),
 ) -> list[WorkflowSummaryResponse]:
-    """List saved workflows, optionally filtered by user."""
+    """List workflows owned by the authenticated user."""
+    owner_id = user_id or current_user.user_id
+    require_self(current_user, owner_id)
     try:
-        if user_id is not None:
-            summaries = workflows.fetch_all_workflows(user_id=user_id)
-        else:
-            summaries = workflows.fetch_all_workflows()
+        summaries = workflows.fetch_all_workflows(user_id=owner_id)
     except UserNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -134,12 +139,14 @@ async def list_workflows(
 async def get_workflow(
     workflow_id: str,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> WorkflowResponse:
     """Get a saved workflow with its steps."""
     try:
         workflow = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    require_workflow_owner(workflow, current_user)
 
     return _to_workflow_response(
         workflow,
@@ -151,12 +158,15 @@ async def get_workflow(
 async def list_workflow_runs(
     workflow_id: str,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> list[RunResponse]:
     """List all runs executed with this workflow."""
     try:
-        runs = workflows.fetch_runs_for_workflow(workflow_id)
+        workflow = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    require_workflow_owner(workflow, current_user)
+    runs = workflows.fetch_runs_for_workflow(workflow_id)
 
     return [to_run_response(run) for run in runs]
 
@@ -167,8 +177,18 @@ async def run_saved_workflow(
     body: WorkflowRunRequest,
     background_tasks: BackgroundTasks,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run a saved workflow on a new upload. Poll GET /api/runs/{id} for progress."""
+    from app.api.usage_http import enforce_upload_usage, record_run_usage
+
+    try:
+        workflow = workflows.fetch_workflow(workflow_id)
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    require_workflow_owner(workflow, current_user)
+
+    page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         run = await workflows.start_workflow_run(workflow_id, body.upload_id)
     except WorkflowNotFoundError as e:
@@ -181,6 +201,12 @@ async def run_saved_workflow(
         raise HTTPException(status_code=502, detail=str(e))
 
     background_tasks.add_task(execute_run, run.run_id)
+    await record_run_usage(
+        current_user.user_id,
+        page_count=page_count,
+        run_id=run.run_id,
+        template_id=getattr(run, "template_id", None),
+    )
     return to_run_response(run)
 
 
@@ -189,8 +215,14 @@ async def update_workflow_from_run(
     workflow_id: str,
     body: WorkflowUpdateFromRunRequest,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> WorkflowResponse:
     """Update a workflow's template from a refined run (creates a new version)."""
+    try:
+        existing = workflows.fetch_workflow(workflow_id)
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    require_workflow_owner(existing, current_user)
     try:
         workflow = workflows.update_from_run(
             workflow_id,
@@ -217,8 +249,14 @@ async def update_workflow_settings(
     workflow_id: str,
     body: WorkflowSettingsUpdateRequest,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> WorkflowResponse:
     """Update workflow metadata and delivery defaults."""
+    try:
+        existing = workflows.fetch_workflow(workflow_id)
+    except WorkflowNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    require_workflow_owner(existing, current_user)
     try:
         workflow = workflows.update_settings(
             workflow_id,
@@ -240,20 +278,14 @@ async def update_workflow_settings(
 async def delete_workflow(
     workflow_id: str,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> None:
     """Permanently delete a workflow."""
     try:
-        workflows.delete_workflow(workflow_id)
+        existing = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-@router.delete("/{workflow_id}", status_code=204)
-async def delete_workflow(
-    workflow_id: str,
-    workflows: WorkflowServiceDep,
-) -> None:
-    """Permanently delete a workflow."""
+    require_workflow_owner(existing, current_user)
     try:
         workflows.delete_workflow(workflow_id)
     except WorkflowNotFoundError as e:

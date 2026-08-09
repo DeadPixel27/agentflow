@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.api.dependencies import TemplateServiceDep
+from app.api.dependencies import CurrentUserDep, TemplateServiceDep
 from app.api.mappers.template import to_template_response, to_template_summary
 from app.models.api.templates import TemplateListResponse, TemplateResponse, TemplateSummaryResponse
 from app.models.domain.template import TemplateNotFoundError
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/templates", tags=["templates"])
 @router.get("", response_model=TemplateListResponse)
 async def list_templates(
     templates: TemplateServiceDep,
+    current_user: CurrentUserDep,
     category: Optional[str] = Query(default=None, description="Filter by category"),
 ) -> TemplateListResponse:
     """List active pipeline templates (from database)."""
@@ -29,6 +30,7 @@ async def list_templates(
 async def get_template(
     template_id: str,
     templates: TemplateServiceDep,
+    current_user: CurrentUserDep,
 ) -> TemplateResponse:
     """Get one template by id."""
     try:

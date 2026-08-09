@@ -1,5 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const AUTH_TOKEN_KEY = "agentflow_access_token";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -10,8 +12,26 @@ export class ApiError extends Error {
   }
 }
 
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAccessToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAccessToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, init);
+  const headers = new Headers(init?.headers);
+  const token = getAccessToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -220,6 +240,7 @@ export async function signIn(name: string, email: string): Promise<{
   user: User;
   is_new_user: boolean;
   auth_provider: string;
+  token: string;
 }> {
   return request("/api/auth/session", {
     method: "POST",
@@ -276,7 +297,11 @@ export async function getUploadDocuments(
 }
 
 export function inputDocumentUrl(uploadId: string, documentId: string): string {
-  return `${API_BASE}/api/uploads/${uploadId}/documents/${documentId}`;
+  const url = `${API_BASE}/api/uploads/${uploadId}/documents/${documentId}`;
+  const token = getAccessToken();
+  if (!token) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}access_token=${encodeURIComponent(token)}`;
 }
 
 export async function listTemplates(category?: string): Promise<TemplateListResponse> {

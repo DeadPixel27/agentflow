@@ -187,6 +187,7 @@ class UserTemplateVersionService:
             current_template_version_id=branched.version_id,
             cached_documents=parent.cached_documents,
             refine_summary=branched.refine_summary,
+            user_id=parent.user_id,
         )
 
     def copy_workflow_version_to_run(

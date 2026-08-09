@@ -1,17 +1,16 @@
 """Inbound address management routes (CRUD for user's forwarding addresses)."""
 
-from typing import Optional
+from fastapi import APIRouter, HTTPException
 
-from fastapi import APIRouter
+from app.api.dependencies import CurrentUserDep, InboundEmailServiceDep, RepoDep
+from app.api.ownership import require_self, require_workflow_owner
 from pydantic import BaseModel
-
-from app.api.dependencies import InboundEmailServiceDep
+from typing import Optional
 
 router = APIRouter(prefix="/api/inbound-addresses", tags=["inbound"])
 
 
 class CreateInboundAddressRequest(BaseModel):
-    user_id: str
     workflow_id: str
 
 
@@ -27,8 +26,15 @@ class InboundAddressResponse(BaseModel):
 async def create_address(
     body: CreateInboundAddressRequest,
     inbound: InboundEmailServiceDep,
+    repo: RepoDep,
+    current_user: CurrentUserDep,
 ) -> InboundAddressResponse:
-    address = inbound.create_inbound_address(body.user_id, body.workflow_id)
+    workflow = repo.get_workflow(body.workflow_id)
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    require_workflow_owner(workflow, current_user)
+
+    address = inbound.create_inbound_address(current_user.user_id, body.workflow_id)
     return InboundAddressResponse(
         address_id=address.address_id,
         full_address=address.full_address,
@@ -40,10 +46,10 @@ async def create_address(
 
 @router.get("", response_model=list[InboundAddressResponse])
 async def list_addresses(
-    user_id: str,
     inbound: InboundEmailServiceDep,
+    current_user: CurrentUserDep,
 ) -> list[InboundAddressResponse]:
-    addresses = inbound.list_addresses(user_id)
+    addresses = inbound.list_addresses(current_user.user_id)
     return [
         InboundAddressResponse(
             address_id=address.address_id,
@@ -60,6 +66,12 @@ async def list_addresses(
 async def delete_address(
     address_id: str,
     inbound: InboundEmailServiceDep,
+    repo: RepoDep,
+    current_user: CurrentUserDep,
 ) -> dict[str, str]:
+    address = repo.get_inbound_address(address_id)
+    if address is None:
+        raise HTTPException(status_code=404, detail="Inbound address not found")
+    require_self(current_user, address.user_id)
     inbound.delete_address(address_id)
     return {"status": "deleted"}

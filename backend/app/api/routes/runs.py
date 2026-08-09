@@ -6,9 +6,16 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
-from app.api.dependencies import RefineServiceDep, RepoDep, TemplateServiceDep, VersionServiceDep
+from app.api.dependencies import (
+    CurrentUserDep,
+    RefineServiceDep,
+    RepoDep,
+    TemplateServiceDep,
+    VersionServiceDep,
+)
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
+from app.api.usage_http import enforce_upload_usage, record_run_usage
 from app.config import settings
 from app.models.api.runs import (
     RunAdhocRequest,
@@ -20,6 +27,7 @@ from app.models.api.runs import (
     RunResponse,
     RunTemplateRequest,
 )
+from app.services.analytics.events import log_event
 from app.services.pipeline.refine_service import (
     RunNotFoundError,
     RunNotRefinableError,
@@ -30,6 +38,7 @@ from app.models.domain.template import TemplateNotFoundError
 from app.services.documents.upload_loader import UploadNotFoundError
 from app.services.pipeline.planner import create_plan
 from app.services.pipeline.runner import execute_run, start_run
+from app.services.usage.metering import RefineLimitError, check_refine_allowed
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 logger = logging.getLogger("api")
@@ -45,14 +54,17 @@ async def run_adhoc(
     request: Request,
     body: RunAdhocRequest,
     background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
 ) -> RunResponse:
     """Plan a pipeline and start execution. Poll GET /api/runs/{id} for progress."""
+    page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         plan = await create_plan(body.upload_id, body.task_description)
         run = await start_run(
             body.upload_id,
             plan.steps,
             plan.task_description,
+            user_id=current_user.user_id,
         )
     except UploadNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -62,6 +74,11 @@ async def run_adhoc(
         raise HTTPException(status_code=502, detail=str(e))
 
     _schedule_run(background_tasks, run.run_id)
+    await record_run_usage(
+        current_user.user_id,
+        page_count=page_count,
+        run_id=run.run_id,
+    )
     return to_run_response(run)
 
 
@@ -73,8 +90,10 @@ async def run_template(
     background_tasks: BackgroundTasks,
     template_service: TemplateServiceDep,
     versions: VersionServiceDep,
+    current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run a pipeline from a template definition. Poll GET /api/runs/{id} for progress."""
+    page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         plan = await template_service.build_plan(body.template_id, body.upload_id)
         template = template_service.get_template(body.template_id)
@@ -84,6 +103,7 @@ async def run_template(
             plan.task_description,
             template_id=template.template_id,
             extraction_prompt=template.extraction_instructions,
+            user_id=current_user.user_id,
         )
         run = versions.attach_initial_run_version(
             run,
@@ -101,6 +121,12 @@ async def run_template(
         raise HTTPException(status_code=502, detail=str(e))
 
     _schedule_run(background_tasks, run.run_id)
+    await record_run_usage(
+        current_user.user_id,
+        page_count=page_count,
+        run_id=run.run_id,
+        template_id=body.template_id,
+    )
     return to_run_response(run)
 
 
@@ -108,14 +134,17 @@ async def run_template(
 async def run_pipeline_steps(
     body: RunRequest,
     background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run an explicit plan. Poll GET /api/runs/{id} for progress."""
+    page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         steps = to_planned_steps(body.steps)
         run = await start_run(
             body.upload_id,
             steps,
             body.task_description,
+            user_id=current_user.user_id,
         )
     except UploadNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -125,6 +154,11 @@ async def run_pipeline_steps(
         raise HTTPException(status_code=502, detail=str(e))
 
     _schedule_run(background_tasks, run.run_id)
+    await record_run_usage(
+        current_user.user_id,
+        page_count=page_count,
+        run_id=run.run_id,
+    )
     return to_run_response(run)
 
 
@@ -134,6 +168,7 @@ async def refine_plan(
     body: RefinePlanRequest,
     repo: RepoDep,
     versions: VersionServiceDep,
+    current_user: CurrentUserDep,
 ) -> RefinePlanResponse:
     """
     Plan Mode: clarify user intent with a cheap/fast model before re-running.
@@ -146,6 +181,10 @@ async def refine_plan(
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+    from app.api.ownership import require_run_access
+
+    await require_run_access(run, current_user, repo)
 
     run = versions.hydrate_run(run)
 
@@ -222,13 +261,27 @@ async def refine_run(
     body: RunRefineRequest,
     background_tasks: BackgroundTasks,
     refine_service: RefineServiceDep,
+    repo: RepoDep,
+    current_user: CurrentUserDep,
 ) -> RunRefineResponse:
     """Refine a completed run's pipeline via chat and start a child run."""
+    from app.api.ownership import require_run_access
+
+    parent = repo.get_run(run_id)
+    if parent is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    await require_run_access(parent, current_user, repo)
+
     logger.info(
         "[refine] apply request parent_run_id=%s message_len=%d",
         run_id,
         len(body.message),
     )
+    try:
+        await check_refine_allowed(run_id, repo=repo)
+    except RefineLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
+
     try:
         run, summary = await refine_service.refine_and_start(run_id, body.message)
     except RunNotFoundError as e:
@@ -240,12 +293,21 @@ async def refine_run(
     except RefinerError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    _schedule_run(background_tasks, run.run_id)
+    # Targeted single-field refine returns a completed run — skip re-execution
+    if run.status == "running":
+        _schedule_run(background_tasks, run.run_id)
     logger.info(
-        "[refine] apply queued child_run_id=%s parent_run_id=%s summary=%r",
+        "[refine] apply queued child_run_id=%s parent_run_id=%s status=%s summary=%r",
         run.run_id,
         run_id,
+        run.status,
         summary,
+    )
+    await log_event(
+        "run_refined",
+        user_id=current_user.user_id,
+        run_id=run.run_id,
+        metadata={"parent_run_id": run_id},
     )
     return RunRefineResponse(run=to_run_response(run), refine_summary=summary)
 
@@ -255,9 +317,13 @@ async def get_run_status(
     run_id: str,
     repo: RepoDep,
     versions: VersionServiceDep,
+    current_user: CurrentUserDep,
 ) -> RunResponse:
     """Fetch a run — poll while status is 'running'."""
+    from app.api.ownership import require_run_access
+
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    await require_run_access(run, current_user, repo)
     return to_run_response(versions.hydrate_run(run))

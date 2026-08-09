@@ -35,14 +35,34 @@ def _infer_target_fields(
     planned_changes: list[str],
     all_fields: list[str],
 ) -> set[str]:
+    """Match field names from instruction/changes, handling underscores and spaces."""
     haystack = " ".join([accumulated_instruction, *planned_changes]).lower()
-    matched = {field for field in all_fields if field.lower() in haystack}
-    if matched:
-        return matched
-    for change in planned_changes:
-        for field in all_fields:
-            if field.replace("_", " ") in change.lower():
+    matched: set[str] = set()
+
+    for field in all_fields:
+        field_lower = field.lower()
+        # Direct match
+        if field_lower in haystack:
+            matched.add(field)
+            continue
+        # Underscore -> space match (e.g. "vendor_name" matches "vendor name")
+        field_spaced = field_lower.replace("_", " ")
+        if field_spaced in haystack:
+            matched.add(field)
+            continue
+
+        # Space -> underscore match
+        field_underscored = field_lower.replace(" ", "_")
+        if field_underscored in haystack:
+            matched.add(field)
+            continue
+
+        # Partial word match (e.g. "vendor" in "fix vendor")
+        for word in field_lower.replace("_", " ").split():
+            if len(word) >= 4 and word in haystack:
                 matched.add(field)
+                break
+
     return matched
 
 
@@ -56,6 +76,24 @@ def _format_value(value: Any) -> Any:
     if isinstance(value, dict):
         return value
     return str(value)
+
+
+def _values_equivalent(a: Any, b: Any) -> bool:
+    """Compare values with normalization to avoid false diffs."""
+    if a == b:
+        return True
+    if a is None or b is None:
+        return False
+    # String normalization: strip whitespace, case-insensitive
+    if isinstance(a, str) and isinstance(b, str):
+        return a.strip().lower() == b.strip().lower()
+    # Numeric: compare with tolerance
+    try:
+        fa, fb = float(a), float(b)
+        return abs(fa - fb) < 0.01
+    except (ValueError, TypeError):
+        pass
+    return str(a).strip() == str(b).strip()
 
 
 async def preview_refinement(
@@ -148,6 +186,15 @@ async def preview_refinement(
         min(len(documents), _MAX_PREVIEW_DOCS),
     )
 
+    # Only show diffs for targeted fields. If no targets matched,
+    # skip field-level preview entirely (show planned_changes text only).
+    if not target_fields:
+        logger.info(
+            "[refine] preview: no target fields matched, skipping field-level diff run_id=%s",
+            run.run_id,
+        )
+        return []
+
     preview_rows: list[dict[str, Any]] = []
     for doc in documents[:_MAX_PREVIEW_DOCS]:
         doc_id = str(doc.get("document_id", ""))
@@ -206,13 +253,14 @@ async def preview_refinement(
 
         field_previews: list[dict[str, Any]] = []
 
-        candidates = target_fields or set(fields)
+        candidates = target_fields
         for field in fields:
-            if field not in candidates and len(candidates) < len(fields):
+            if field not in candidates:
                 continue
             before = _format_value(before_row.get(field))
             after = _format_value(after_fields.get(field))
-            if before == after and field not in target_fields:
+            # Normalize for comparison to avoid false diffs from LLM non-determinism
+            if _values_equivalent(before, after):
                 continue
             log_preview_diff(
                 logger,

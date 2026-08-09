@@ -1,6 +1,6 @@
 # AgentFlow — Documentation Index
 
-All project documentation, split by topic. Updated Aug 7, 2026.
+All project documentation, split by topic. Updated Aug 9, 2026.
 
 > **Architecture:** See [../ARCHITECTURE.md](../ARCHITECTURE.md) for Mermaid diagrams (system context, templates, pipeline flow).  
 > **Screenshot JPEGs** in `_archive/source-screenshots/` are gitignored; content lives in the markdown files below.
@@ -38,9 +38,12 @@ All project documentation, split by topic. Updated Aug 7, 2026.
 | [TEMPLATES.md](./TEMPLATES.md) | 7 pipeline templates with prompts, fields, rules | Building the template library |
 | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) | Chat refine flow, API design, data model, UI wireframe | Building the refine feature |
 | [AGENTS.md](./AGENTS.md) | Current 5 agents + 9 planned + how to add new ones | Adding new agent types |
-| [FRONTEND-V2-PLAN.md](./FRONTEND-V2-PLAN.md) | V2 frontend one-shot build prompt — pages, components, modals, API, file-by-file | Rebuilding the Next.js UI to V2 |
-| [BACKEND-V2-PLAN.md](./BACKEND-V2-PLAN.md) | V2 backend one-shot build prompt — email, sheets, inbound, workflow PATCH/settings, auth fix | Implementing backend APIs for V2 frontend |
-| [FRONTEND-V3-PLAN.md](./FRONTEND-V3-PLAN.md) | V3 Plan Mode refine chat — two-phase Send/Apply flow, `refinePlan()` API | Upgrading refine panel before backend V3 ships |
+| [FRONTEND-V2-PLAN.md](./FRONTEND-V2-PLAN.md) | V2 frontend one-shot build prompt — pages, components, modals, API, file-by-file | Historical — V2 shipped |
+| [BACKEND-V2-PLAN.md](./BACKEND-V2-PLAN.md) | V2 backend one-shot build prompt — email, sheets, inbound, workflow PATCH/settings, auth fix | Historical — V2 shipped |
+| [FRONTEND-V3-PLAN.md](./FRONTEND-V3-PLAN.md) | V3 Plan Mode refine chat — two-phase Send/Apply flow, `refinePlan()` API | Upgrading refine panel |
+| [BACKEND-V3-PLAN.md](./BACKEND-V3-PLAN.md) | V3 extraction hardening + Plan Mode refine endpoint | Backend refine / extraction upgrades |
+| [BACKEND-LAUNCH-PROMPT.md](./BACKEND-LAUNCH-PROMPT.md) | Launch: JWT auth, GPT-4o, metering, budget, waitlist, OCR upgrades | **Current backend implementation prompt** |
+| [FRONTEND-LAUNCH-PROMPT.md](./FRONTEND-LAUNCH-PROMPT.md) | Launch: auth UI, usage, waitlist, pricing, confidence/validation UI | **Current frontend implementation prompt** |
 
 ---
 
@@ -55,6 +58,8 @@ All project documentation, split by topic. Updated Aug 7, 2026.
 | Adding an agent | [AGENTS.md](./AGENTS.md) |
 | Tune LLM prompts | [PROMPTS.md](./PROMPTS.md) |
 | Sprint order / deploy plan | [PLAN-AND-NEXT-STEPS.md](./PLAN-AND-NEXT-STEPS.md) |
+| Implement launch backend | [BACKEND-LAUNCH-PROMPT.md](./BACKEND-LAUNCH-PROMPT.md) |
+| Implement launch frontend | [FRONTEND-LAUNCH-PROMPT.md](./FRONTEND-LAUNCH-PROMPT.md) |
 
 ---
 

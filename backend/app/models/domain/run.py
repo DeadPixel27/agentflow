@@ -33,3 +33,4 @@ class RunResult:
     refine_summary: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
+    user_id: Optional[str] = None

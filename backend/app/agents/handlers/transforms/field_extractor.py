@@ -38,6 +38,7 @@ class FieldExtractorHandler(StepHandler):
             str(config.get("instructions") or "").strip(),
         )
 
+        # Flat rows for CSV / rules agents (field values only)
         rows = [
             {
                 "document_id": item.document_id,
@@ -48,7 +49,23 @@ class FieldExtractorHandler(StepHandler):
         ]
         ctx.data["rows"] = rows
 
-        return StepResult(output={"row_count": len(rows), "fields": fields})
+        # Confidence + validation kept separate so CSV stays clean
+        ctx.data["field_confidence"] = {
+            item.document_id: item.confidence for item in extracted
+        }
+        ctx.data["validation_warnings"] = {
+            item.document_id: item.validation_warnings for item in extracted
+        }
+
+        return StepResult(
+            output={
+                "row_count": len(rows),
+                "fields": fields,
+                "documents_with_warnings": sum(
+                    1 for item in extracted if item.validation_warnings
+                ),
+            }
+        )
 
 
 register_agent(
