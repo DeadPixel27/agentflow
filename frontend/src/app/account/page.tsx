@@ -4,7 +4,6 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { NavBar } from "@/components/nav-bar";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,7 +123,6 @@ export default function AccountPage() {
   if (!user) {
     return (
       <div className="v2-page">
-        <NavBar />
         <PageHeader title="Account" description="Sign in to save workflows" />
         <main className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-[480px]">
@@ -164,7 +162,6 @@ export default function AccountPage() {
 
   return (
     <div className="v2-page">
-      <NavBar />
       <PageHeader title="Account" description="Manage your profile and integrations" />
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto max-w-[680px] space-y-6">

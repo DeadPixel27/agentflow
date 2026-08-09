@@ -65,7 +65,7 @@
 
 @layer utilities {
   .v2-page {
-    @apply flex h-screen flex-col overflow-hidden bg-background;
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-background;
   }
 
   .v2-badge-success {

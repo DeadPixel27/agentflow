@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { UploadZone } from "@/components/upload-zone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NavBar } from "@/components/nav-bar";
 import {
   ApiError,
   getTemplate,
@@ -90,7 +89,6 @@ export default function HomePage() {
 
   return (
     <div className="v2-page">
-      <NavBar />
       <main className="flex flex-1 flex-col items-center overflow-y-auto px-4 py-10">
         <div className="w-full max-w-[700px] space-y-6">
           <div className="text-center space-y-3">

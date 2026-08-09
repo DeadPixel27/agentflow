@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { NavBar } from "@/components/nav-bar";
 import { DetailLayout } from "@/components/workflow/detail-layout";
 import { DetailSidebar } from "@/components/workflow/detail-sidebar";
 import { RerunZone } from "@/components/workflow/rerun-zone";
@@ -59,7 +58,6 @@ export default function WorkflowDetailPage() {
   if (error || !workflow) {
     return (
       <div className="v2-page">
-        <NavBar />
         <main className="p-6">
           <p className="text-destructive">{error ?? "Workflow not found."}</p>
           <Link href="/workflows" className="text-sm text-primary hover:underline mt-2 inline-block">
@@ -78,9 +76,7 @@ export default function WorkflowDetailPage() {
   return (
     <DetailLayout
       header={
-        <>
-          <NavBar />
-          <div className="shrink-0 border-b border-border px-4 sm:px-6 py-5">
+        <div className="shrink-0 border-b border-border px-4 sm:px-6 py-5">
             <Link
               href="/workflows"
               className="text-xs text-muted-foreground hover:text-foreground mb-2 inline-block"
@@ -101,7 +97,6 @@ export default function WorkflowDetailPage() {
               {runs.length} runs · {workflow.steps.length} steps
             </p>
           </div>
-        </>
       }
       main={
         <>

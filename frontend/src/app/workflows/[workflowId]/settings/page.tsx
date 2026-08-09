@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { NavBar } from "@/components/nav-bar";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -163,7 +162,6 @@ export default function WorkflowSettingsPage() {
 
   return (
     <div className="v2-page">
-      <NavBar />
       <PageHeader
         title="Workflow Settings"
         description={workflow?.name}

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
-import { NavBar } from "@/components/nav-bar";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
@@ -120,7 +119,6 @@ export default function WorkflowsPage() {
 
   return (
     <div className="v2-page">
-      <NavBar />
       <PageHeader
         title="Workflows"
         description="Your saved extraction pipelines"

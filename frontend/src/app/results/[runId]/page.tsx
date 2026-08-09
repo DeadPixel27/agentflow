@@ -1,31 +1,15 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { ResultsLayout } from "@/components/results/results-layout";
+import { useRunResultsContext } from "@/components/results/run-results-context";
 import { useRunPolling } from "@/hooks/use-run-polling";
 import { toastError, toastSuccess } from "@/lib/toast";
 
 export default function ResultsPage() {
-  const router = useRouter();
-  const params = useParams();
-  const routeRunId = params.runId as string;
-  const [activeRunId, setActiveRunId] = useState(routeRunId);
-  const [refining, setRefining] = useState(false);
+  const { activeRunId, refining, setRefining, setRunState, setPageConfig } =
+    useRunResultsContext();
   const [savedWorkflowId, setSavedWorkflowId] = useState<string | null>(null);
-  const chatSessionKeyRef = useRef(
-    typeof window !== "undefined"
-      ? `${routeRunId}-${Date.now()}`
-      : routeRunId,
-  );
-
-  useEffect(() => {
-    setActiveRunId(routeRunId);
-    chatSessionKeyRef.current = `${routeRunId}-${Date.now()}`;
-    setRefining(false);
-  }, [routeRunId]);
 
   const { run, loading, error, isRunning } = useRunPolling(activeRunId, {
     onComplete: (data) => {
@@ -45,43 +29,24 @@ export default function ResultsPage() {
     if (run?.workflow_id) setSavedWorkflowId(run.workflow_id);
   }, [run?.workflow_id]);
 
-  const showInitialLoader = loading && !run;
+  useEffect(() => {
+    setPageConfig({
+      backHref: "/",
+      backLabel: "New run",
+      saveAction: savedWorkflowId ? "none" : "workflow",
+      workflowId: savedWorkflowId ?? undefined,
+      onWorkflowSaved: (workflowId) => setSavedWorkflowId(workflowId),
+    });
+  }, [savedWorkflowId, setPageConfig]);
 
-  if (showInitialLoader) {
-    return (
-      <div className="v2-page items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  useEffect(() => {
+    setRunState({
+      run,
+      isRunning: isRunning || refining,
+      loading,
+      error,
+    });
+  }, [run, isRunning, refining, loading, error, setRunState]);
 
-  if (error && !run) {
-    return (
-      <div className="v2-page items-center justify-center p-4">
-        <p className="text-destructive" role="alert">
-          {error}
-        </p>
-      </div>
-    );
-  }
-
-  if (!run) return null;
-
-  return (
-    <ResultsLayout
-      run={run}
-      isRunning={isRunning || refining}
-      backHref="/"
-      backLabel="New run"
-      saveAction={savedWorkflowId ? "none" : "workflow"}
-      workflowId={savedWorkflowId ?? undefined}
-      refineRunId={activeRunId}
-      chatSessionKey={chatSessionKeyRef.current}
-      onRefined={(newRunId) => {
-        setRefining(true);
-        setActiveRunId(newRunId);
-        router.replace(`/results/${newRunId}`, { scroll: false });
-      }}
-    />
-  );
+  return null;
 }
