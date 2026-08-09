@@ -10,6 +10,7 @@ from app.persistence.templates.memory_repository import MemoryTemplateRepository
 from app.services.templates.template_service import TemplateService
 from app.templates.invoice import INVOICE_TEMPLATE
 from app.services.pipeline.template_planner import create_plan_from_template
+from tests.auth_helpers import override_current_user
 
 client = TestClient(app)
 
@@ -43,6 +44,7 @@ def test_template_service_raises_for_missing():
 def test_list_templates_api():
     memory = MemoryTemplateRepository()
     app.dependency_overrides[get_template_repo] = lambda: memory
+    override_current_user()
     try:
         response = client.get("/api/templates")
         assert response.status_code == 200
@@ -59,6 +61,7 @@ def test_list_templates_api():
 def test_get_template_api_returns_full_detail():
     memory = MemoryTemplateRepository()
     app.dependency_overrides[get_template_repo] = lambda: memory
+    override_current_user()
     try:
         response = client.get("/api/templates/invoice")
         assert response.status_code == 200

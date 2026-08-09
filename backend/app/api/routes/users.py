@@ -4,9 +4,11 @@ Users Route — create users and list their workflows.
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import AuthServiceDep, UserServiceDep, WorkflowServiceDep
+from app.api.dependencies import AuthServiceDep, CurrentUserDep, UserServiceDep, WorkflowServiceDep
+from app.api.ownership import require_self
 from app.models.api.users import UserCreateRequest, UserResponse
 from app.models.api.workflows import WorkflowSummaryResponse
+from app.services.usage.metering import get_usage_summary
 from app.services.users.user_service import UserNotFoundError
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -27,23 +29,29 @@ async def register_user(body: UserCreateRequest, auth: AuthServiceDep) -> UserRe
     )
 
 
-@router.get("", response_model=list[UserResponse])
-async def list_all_users(users: UserServiceDep) -> list[UserResponse]:
-    """List all users."""
-    return [
-        UserResponse(
-            user_id=user.user_id,
-            name=user.name,
-            email=user.email,
-            created_at=user.created_at,
-        )
-        for user in users.fetch_all_users()
-    ]
+@router.get("/me/usage")
+async def get_my_usage(current_user: CurrentUserDep) -> dict:
+    """Get the authenticated user's usage stats for the current month."""
+    try:
+        return await get_usage_summary(current_user.user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch usage: {e}") from e
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: CurrentUserDep) -> UserResponse:
+    """Get the authenticated user."""
+    return current_user
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str, users: UserServiceDep) -> UserResponse:
-    """Get a user by ID."""
+async def get_user(
+    user_id: str,
+    users: UserServiceDep,
+    current_user: CurrentUserDep,
+) -> UserResponse:
+    """Get a user by ID (self only)."""
+    require_self(current_user, user_id)
     try:
         user = users.fetch_user(user_id)
     except UserNotFoundError as e:
@@ -61,8 +69,10 @@ async def get_user(user_id: str, users: UserServiceDep) -> UserResponse:
 async def list_user_workflows(
     user_id: str,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> list[WorkflowSummaryResponse]:
-    """List workflows owned by a user."""
+    """List workflows owned by the authenticated user."""
+    require_self(current_user, user_id)
     try:
         items = workflows.fetch_workflows_for_user(user_id)
     except UserNotFoundError as e:

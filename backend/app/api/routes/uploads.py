@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
-from app.api.dependencies import DocStoreDep
+from app.api.dependencies import CurrentUserDep, DocStoreDep
 from app.models.api.upload import UploadDocumentsResponse, UploadedDocumentSummary
 from app.models.domain.document import DocumentNotFoundError, UploadNotFoundError
 from app.persistence.documents.validation import media_type_for
@@ -12,7 +12,11 @@ router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
 
 @router.get("/{upload_id}", response_model=UploadDocumentsResponse)
-async def get_upload_documents(upload_id: str, store: DocStoreDep) -> UploadDocumentsResponse:
+async def get_upload_documents(
+    upload_id: str,
+    store: DocStoreDep,
+    current_user: CurrentUserDep,
+) -> UploadDocumentsResponse:
     """List documents in an upload batch (no extracted text)."""
     try:
         metadata = await store.list_documents(upload_id)
@@ -37,6 +41,7 @@ async def get_upload_document_file(
     upload_id: str,
     document_id: str,
     store: DocStoreDep,
+    current_user: CurrentUserDep,
 ) -> Response:
     """Download or preview an uploaded input document."""
     try:

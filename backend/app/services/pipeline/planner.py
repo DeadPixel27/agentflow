@@ -9,7 +9,7 @@ from typing import Any
 
 from app.agents.core.registry import get_agent_catalog
 from app.models.domain.pipeline import PipelinePlan, PlannedStep
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
 from app.services.pipeline.step_parse import StepParseError, parse_planned_steps
 from app.validation.task_input import format_user_task_for_llm, require_task_description
 from app.services.documents.upload_loader import UploadDocumentInfo, load_upload_documents
@@ -52,7 +52,7 @@ async def create_plan(
         raise ValueError(f"No documents found for upload {upload_id}")
 
     user_prompt = _build_prompt(task, documents)
-    parsed = await complete_json(SYSTEM_PROMPT, user_prompt)
+    parsed = await complete_json(SYSTEM_PROMPT, user_prompt, task=LLMTask.PLANNER)
     try:
         steps = parse_planned_steps(parsed)
     except StepParseError as exc:

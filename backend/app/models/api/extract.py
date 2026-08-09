@@ -19,6 +19,8 @@ class ExtractedFields(BaseModel):
     document_id: str
     filename: str = ""
     fields: dict[str, Any]
+    confidence: dict[str, float] = Field(default_factory=dict)
+    validation_warnings: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ExtractResponse(BaseModel):

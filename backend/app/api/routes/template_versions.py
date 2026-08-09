@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import VersionServiceDep, WorkflowServiceDep
+from app.api.dependencies import CurrentUserDep, VersionServiceDep, WorkflowServiceDep
 from app.api.mappers.template_version import to_template_version_detail
 from app.models.api.template_versions import (
     RevertVersionRequest,
@@ -28,6 +28,7 @@ async def list_workflow_template_versions(
     workflow_id: str,
     workflows: WorkflowServiceDep,
     versions: VersionServiceDep,
+    current_user: CurrentUserDep,
 ) -> list[TemplateVersionSummaryResponse]:
     try:
         workflow = workflows.fetch_workflow(workflow_id)
@@ -48,6 +49,7 @@ async def get_workflow_template_version(
     version_id: str,
     workflows: WorkflowServiceDep,
     versions: VersionServiceDep,
+    current_user: CurrentUserDep,
 ) -> TemplateVersionDetailResponse:
     try:
         workflow = workflows.fetch_workflow(workflow_id)
@@ -75,6 +77,7 @@ async def revert_workflow_to_version(
     workflow_id: str,
     body: RevertVersionRequest,
     workflows: WorkflowServiceDep,
+    current_user: CurrentUserDep,
 ) -> RevertWorkflowResponse:
     """Branch workflow template from an earlier version (non-destructive)."""
     try:

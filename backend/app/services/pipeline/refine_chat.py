@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Any
 
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
 
 logger = logging.getLogger("refine_chat")
 
@@ -237,6 +237,7 @@ async def plan_refinement(
     result = await complete_json(
         _PLAN_SYSTEM_PROMPT,
         user_prompt,
+        task=LLMTask.PLAN_MODE,
         model=_PLAN_MODEL,
     )
 

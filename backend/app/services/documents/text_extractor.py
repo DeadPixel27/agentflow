@@ -1,32 +1,27 @@
 """
 Document Text Extraction — pulls text from PDFs and images.
 
-TWO STRATEGIES (the planner will pick later; for now we auto-detect):
+STRATEGIES (tried in order for PDFs):
 
-1. PyMuPDF (fitz) — for DIGITAL PDFs
-   - PDFs created from Word/Excel/etc. have selectable text embedded
-   - Fast, free, no OCR needed
-
-2. Tesseract OCR — for IMAGES and SCANNED PDFs
-   - Photos, screenshots, scanned documents = just pixels, no text layer
-   - Tesseract reads the pixels and guesses the characters
-   - Slower, but necessary when there's no embedded text
+1. Docling — layout-preserving markdown (tables, headers) when enabled
+2. PyMuPDF (fitz) — for DIGITAL PDFs with selectable text
+3. OCR (RapidOCR or Tesseract) — for images and scanned PDFs
 
 HOW WE DECIDE:
-   Try PyMuPDF first. If we get meaningful text → done.
+   Try Docling (if enabled), then PyMuPDF. If we get meaningful text → done.
    If text is empty/too short → fall back to OCR.
 """
 
 import asyncio
 import logging
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import fitz  # PyMuPDF
-import pytesseract
 from PIL import Image
+
+from app.services.documents.ocr_engines import get_ocr_engine
 
 logger = logging.getLogger("ocr")
 
@@ -44,7 +39,7 @@ class ExtractionResult:
     """Result of text extraction from a document."""
 
     text: str
-    method: str  # "pymupdf" | "tesseract" | "none" | "error"
+    method: str  # "docling" | "pymupdf" | "rapidocr" | "tesseract" | "none" | "error"
     error_message: Optional[str] = None
 
 
@@ -76,23 +71,19 @@ def _extract_text_sync(file_path: Path) -> tuple[str, str]:
     return "", "none"
 
 
-def _check_tesseract_installed() -> None:
-    """Tesseract is a system program, not a Python package."""
-    if shutil.which("tesseract") is None:
-        raise RuntimeError(
-            "Tesseract is not installed. Install it with:\n"
-            "  macOS:   brew install tesseract\n"
-            "  Ubuntu:  sudo apt install tesseract-ocr\n"
-            "  Windows: https://github.com/UB-Mannheim/tesseract/wiki"
-        )
-
-
 def extract_text_from_pdf(file_path: Path) -> tuple[str, str]:
     """
-    Extract text from a PDF using PyMuPDF.
+    Extract text from a PDF using layout-preserving extraction (Docling),
+    falling back to PyMuPDF, then OCR.
 
     Returns: (extracted_text, method_used)
     """
+    from app.services.documents.layout_extractor import extract_layout_text
+
+    layout_text = extract_layout_text(file_path)
+    if layout_text:
+        return layout_text, "docling"
+
     doc = fitz.open(file_path)
     pages_text: list[str] = []
 
@@ -111,7 +102,7 @@ def extract_text_from_pdf(file_path: Path) -> tuple[str, str]:
 
 def _ocr_pdf(file_path: Path) -> tuple[str, str]:
     """Render each PDF page as an image, then OCR it."""
-    _check_tesseract_installed()
+    engine = get_ocr_engine()
 
     doc = fitz.open(file_path)
     pages_text: list[str] = []
@@ -120,14 +111,14 @@ def _ocr_pdf(file_path: Path) -> tuple[str, str]:
         # Render page at 2x resolution for better OCR accuracy
         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        pages_text.append(pytesseract.image_to_string(img))
+        pages_text.append(engine.ocr_image(img))
 
     doc.close()
-    return "\n".join(pages_text).strip(), "tesseract"
+    return "\n".join(pages_text).strip(), engine.name
 
 
 def _prepare_image_for_ocr(img: Image.Image) -> Image.Image:
-    """Shrink oversized images so Tesseract runs faster."""
+    """Shrink oversized images so OCR runs faster."""
     w, h = img.size
     longest = max(w, h)
     if longest <= MAX_OCR_DIMENSION:
@@ -141,10 +132,10 @@ def _prepare_image_for_ocr(img: Image.Image) -> Image.Image:
 
 def extract_text_from_image(file_path: Path) -> tuple[str, str]:
     """OCR a single image file."""
-    _check_tesseract_installed()
+    engine = get_ocr_engine()
 
     img = Image.open(file_path)
     logger.info("OCR started: %s (%dx%d)", file_path.name, *img.size)
     img = _prepare_image_for_ocr(img)
-    text = pytesseract.image_to_string(img)
-    return text.strip(), "tesseract"
+    text = engine.ocr_image(img)
+    return text.strip(), engine.name

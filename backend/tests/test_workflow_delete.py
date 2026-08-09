@@ -12,6 +12,7 @@ from app.persistence.user_templates.local_repository import LocalUserTemplateRep
 from app.services.templates.user_template_version_service import UserTemplateVersionService
 from app.services.users.user_service import UserService
 from app.services.workflows.workflow_service import WorkflowService
+from tests.auth_helpers import override_current_user
 
 
 def _steps() -> list[PlannedStep]:
@@ -42,6 +43,7 @@ def _override(repo, versions, workflows):
     app.dependency_overrides[get_repo] = lambda: repo
     app.dependency_overrides[get_version_service] = lambda: versions
     app.dependency_overrides[get_workflow_service] = lambda: workflows
+    override_current_user()
 
 
 def _seed_completed_run(repo: MemoryRepository, versions: UserTemplateVersionService) -> RunResult:

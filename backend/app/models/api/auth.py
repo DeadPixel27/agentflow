@@ -12,3 +12,4 @@ class SignInResponse(BaseModel):
     user: UserResponse
     is_new_user: bool
     auth_provider: str
+    token: str

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import RepoDep
+from app.api.dependencies import CurrentUserDep, RepoDep
 from app.models.api.sheets import SheetsPushRequest, SheetsPushResponse
 from app.models.domain.sheets import SheetsError
 from app.services.sheets.sheets_service import push_rows_to_sheet
@@ -15,6 +15,7 @@ async def push_run_to_sheets(
     run_id: str,
     body: SheetsPushRequest,
     repo: RepoDep,
+    current_user: CurrentUserDep,
 ) -> SheetsPushResponse:
     run = repo.get_run(run_id)
     if run is None:

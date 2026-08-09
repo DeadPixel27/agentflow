@@ -13,6 +13,7 @@ from app.services.pipeline.refine_service import RefineService
 from app.services.pipeline.pipeline_refiner import RefinerError, refine_pipeline
 from app.services.pipeline.step_parse import parse_planned_steps
 from app.services.templates.user_template_version_service import UserTemplateVersionService
+from tests.auth_helpers import override_current_user
 
 client = TestClient(app)
 
@@ -43,6 +44,7 @@ def _completed_run() -> RunResult:
         ],
         document_ids=["doc-1"],
         planned_steps=steps,
+        user_id="user-1",
         cached_documents=[
             {
                 "document_id": "doc-1",
@@ -139,6 +141,7 @@ def test_refine_run_api_starts_child_run(monkeypatch):
     app.dependency_overrides[get_repo] = lambda: repo
     versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
     app.dependency_overrides[get_refine_service] = lambda: RefineService(repo, versions)
+    override_current_user()
     try:
         response = client.post(
             "/api/runs/run-parent/refine",
@@ -162,6 +165,7 @@ def test_refine_run_rejects_running_parent():
     app.dependency_overrides[get_repo] = lambda: repo
     versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
     app.dependency_overrides[get_refine_service] = lambda: RefineService(repo, versions)
+    override_current_user()
     try:
         response = client.post(
             "/api/runs/run-parent/refine",
@@ -208,6 +212,7 @@ def test_refine_plan_endpoint(monkeypatch):
     app.dependency_overrides[get_repo] = lambda: repo
     versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
     app.dependency_overrides[get_version_service] = lambda: versions
+    override_current_user()
     try:
         response = client.post(
             "/api/runs/run-parent/refine/plan",
@@ -227,6 +232,7 @@ def test_refine_plan_endpoint(monkeypatch):
 def test_refine_plan_not_found():
     repo = MemoryRepository()
     app.dependency_overrides[get_repo] = lambda: repo
+    override_current_user()
     try:
         response = client.post(
             "/api/runs/missing/refine/plan",

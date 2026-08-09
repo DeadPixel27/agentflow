@@ -6,7 +6,7 @@ from typing import Any, Optional
 from app.config import settings
 from app.models.domain.template import PipelineTemplate
 from app.persistence.protocols import DataRepository, TemplateRepository, UserTemplateStorageRepository
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
 from app.services.templates.user_template_version_service import UserTemplateVersionService
 
 OWNER_SYNTHESIS_PROMPT = """\
@@ -89,6 +89,7 @@ class TemplateMasterRefineService:
         return await complete_json(
             OWNER_SYNTHESIS_PROMPT,
             user_prompt,
+            task=LLMTask.REFINER,
             model=settings.groq_owner_model,
         )
 

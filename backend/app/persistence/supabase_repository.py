@@ -132,6 +132,8 @@ class SupabaseRepository:
             row["extraction_prompt"] = persist_run.extraction_prompt
         else:
             row["extraction_prompt"] = None
+        if persist_run.user_id is not None:
+            row["user_id"] = persist_run.user_id
 
         _get_client().table("workflow_runs").upsert(row).execute()
 
@@ -193,7 +195,20 @@ class SupabaseRepository:
             extraction_prompt=row.get("extraction_prompt"),
             result=row.get("result"),
             error_message=row.get("error_message"),
+            user_id=row.get("user_id"),
         )
+
+    def count_child_runs(self, parent_run_id: str) -> int:
+        resp = (
+            _get_client()
+            .table("workflow_runs")
+            .select("id", count="exact")
+            .eq("parent_run_id", parent_run_id)
+            .execute()
+        )
+        if getattr(resp, "count", None) is not None:
+            return int(resp.count)
+        return len(resp.data or [])
 
     def list_runs_by_workflow(self, workflow_id: str) -> list[RunResult]:
         resp = (

@@ -185,6 +185,7 @@ class WorkflowService:
             template_id=workflow.parent_template_id,
             extraction_prompt=prompt,
             current_template_version_id=version_id,
+            user_id=workflow.user_id,
         )
         if self._versions is not None and version_id:
             run = self._versions.copy_workflow_version_to_run(

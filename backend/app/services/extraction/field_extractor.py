@@ -1,16 +1,18 @@
 """
-Field Extractor — uses Groq to pull structured fields from document text.
+Field Extractor — uses the LLM router to pull structured fields from document text.
 
 INPUT:  raw text + list of field names (+ optional instructions)
-OUTPUT: dict of field → value per document
+OUTPUT: dict of field → value per document, plus confidence + validation warnings
 """
+
+from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
 from app.services.documents.upload_loader import load_upload_documents
 
 logger = logging.getLogger("extract")
@@ -61,6 +63,8 @@ class ExtractedDocument:
     document_id: str
     filename: str
     fields: dict[str, Any]
+    confidence: dict[str, float] = field(default_factory=dict)
+    validation_warnings: list[dict[str, str]] = field(default_factory=list)
 
 
 async def extract_fields(
@@ -77,9 +81,93 @@ async def extract_fields(
         raise ValueError("At least one field name is required")
 
     user_prompt = _build_prompt(documents, fields, instructions)
-    parsed = await complete_json(SYSTEM_PROMPT, user_prompt)
+    schema = _build_extraction_json_schema(fields)
+    result = await complete_json(
+        SYSTEM_PROMPT,
+        user_prompt,
+        task=LLMTask.EXTRACTION,
+        json_schema=schema,
+        return_logprobs=True,
+    )
 
-    return _parse_llm_response(parsed, documents, fields)
+    from app.services.llm.openai_client import LLMResult
+
+    if isinstance(result, LLMResult):
+        parsed = result.parsed
+        from app.services.extraction.confidence import compute_document_field_confidence
+
+        confidences_by_doc = compute_document_field_confidence(
+            parsed, result.logprobs, fields
+        )
+    else:
+        parsed = result
+        confidences_by_doc = {
+            doc.document_id: {field_name: 0.5 for field_name in fields}
+            for doc in documents
+        }
+
+    extracted_docs = _parse_llm_response(parsed, documents, fields, confidences_by_doc)
+
+    from app.services.extraction.validators import validate_extracted_fields
+
+    for doc_result in extracted_docs:
+        validation = validate_extracted_fields(doc_result.fields)
+        doc_result.validation_warnings = validation.to_dict()
+
+    return extracted_docs
+
+
+async def extract_single_field(
+    document: DocumentInput,
+    field: str,
+    instructions: Optional[str] = None,
+) -> tuple[Any, float]:
+    """
+    Re-extract a single field from a document.
+    Returns (value, confidence) - used by targeted refinement.
+    Much cheaper than full re-extraction (~5x fewer tokens).
+    """
+    single_prompt = _build_prompt([document], [field], instructions)
+    schema = _build_extraction_json_schema([field])
+    result = await complete_json(
+        SYSTEM_PROMPT,
+        single_prompt,
+        task=LLMTask.EXTRACTION,
+        json_schema=schema,
+        return_logprobs=True,
+    )
+
+    from app.services.llm.openai_client import LLMResult
+
+    if isinstance(result, LLMResult):
+        parsed = result.parsed
+        from app.services.extraction.confidence import compute_document_field_confidence
+
+        conf_by_doc = compute_document_field_confidence(
+            parsed, result.logprobs, [field]
+        )
+        conf = conf_by_doc.get(document.document_id) or next(
+            iter(conf_by_doc.values()), {field: 0.5}
+        )
+    else:
+        parsed = result
+        conf = {field: 0.5}
+
+    # Extract the value from the response
+    results = parsed.get("results", [])
+    if results:
+        by_id = {
+            item.get("document_id"): item
+            for item in results
+            if isinstance(item, dict)
+        }
+        item = by_id.get(document.document_id) or results[0]
+        fields_map = item.get("fields", {}) if isinstance(item, dict) else {}
+        value = fields_map.get(field)
+    else:
+        value = None
+
+    return value, conf.get(field, 0.5)
 
 
 async def extract_fields_from_upload(
@@ -110,6 +198,53 @@ async def extract_fields_from_upload(
     return await extract_fields(documents, fields, instructions)
 
 
+def _build_extraction_json_schema(fields: list[str]) -> dict[str, Any]:
+    """
+    OpenAI json_schema for extraction results.
+
+    Enumerates field names so the top-level shape is constrained. Value types are
+    flexible (string/number/bool/null/array/object) — strict mode is disabled in
+    the client for this schema because nested free-form objects are common.
+    """
+    field_value = {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "integer"},
+            {"type": "boolean"},
+            {"type": "null"},
+            {"type": "array"},
+            {"type": "object"},
+        ]
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "results": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "document_id": {"type": "string"},
+                        "fields": {
+                            "type": "object",
+                            "properties": {
+                                name: field_value for name in fields
+                            },
+                            "required": list(fields),
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": ["document_id", "fields"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["results"],
+        "additionalProperties": False,
+    }
+
+
 def _build_prompt(
     documents: list[DocumentInput],
     fields: list[str],
@@ -130,7 +265,7 @@ def _build_prompt(
             "results": [
                 {
                     "document_id": "string — must match input document_id",
-                    "fields": {field: "value or null" for field in fields},
+                    "fields": {field_name: "value or null" for field_name in fields},
                 }
             ]
         },
@@ -142,6 +277,7 @@ def _parse_llm_response(
     parsed: dict[str, Any],
     documents: list[DocumentInput],
     fields: list[str],
+    confidences_by_doc: dict[str, dict[str, float]] | None = None,
 ) -> list[ExtractedDocument]:
     raw_results = parsed.get("results", [])
     by_id = {item.get("document_id"): item for item in raw_results}
@@ -151,12 +287,16 @@ def _parse_llm_response(
         item = by_id.get(doc.document_id, {})
         field_values = item.get("fields", {}) if isinstance(item, dict) else {}
 
-        normalized = {field: field_values.get(field) for field in fields}
+        normalized = {field_name: field_values.get(field_name) for field_name in fields}
+        doc_confidence = (confidences_by_doc or {}).get(doc.document_id) or {
+            field_name: 0.5 for field_name in fields
+        }
         results.append(
             ExtractedDocument(
                 document_id=doc.document_id,
                 filename=doc.filename,
                 fields=normalized,
+                confidence=doc_confidence,
             )
         )
 

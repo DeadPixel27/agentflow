@@ -62,8 +62,11 @@ class InboundEmailService:
         recipient: str,
         sender: str,
         attachments: list[dict[str, Any]],
-    ) -> tuple[str, str, str]:
-        """Process an inbound email — save attachments and return routing info."""
+    ) -> tuple[str, str, str, str]:
+        """Process an inbound email — save attachments and return routing info.
+
+        Returns: (upload_id, workflow_id, sender, owner_user_id)
+        """
         address = self.resolve_address(recipient)
 
         if not attachments:
@@ -80,9 +83,10 @@ class InboundEmailService:
             )
 
         logger.info(
-            "Inbound email from %s → workflow %s, upload %s",
+            "Inbound email from %s → workflow %s, upload %s, user %s",
             sender,
             address.workflow_id,
             upload_id,
+            address.user_id,
         )
-        return upload_id, address.workflow_id, sender
+        return upload_id, address.workflow_id, sender, address.user_id

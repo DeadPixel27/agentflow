@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import RepoDep
+from app.api.dependencies import CurrentUserDep, RepoDep
 from app.models.api.email import EmailResultsRequest, EmailResultsResponse
 from app.models.domain.email import EmailDeliveryError, EmailRequest
 from app.services.email.email_service import send_results_email
@@ -15,6 +15,7 @@ async def email_run_results(
     run_id: str,
     body: EmailResultsRequest,
     repo: RepoDep,
+    current_user: CurrentUserDep,
 ) -> EmailResultsResponse:
     run = repo.get_run(run_id)
     if run is None:
