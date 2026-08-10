@@ -167,11 +167,18 @@ export default function AccountPage() {
   if (!user) {
     return (
       <div className="v2-page">
-        <PageHeader title="Account" description="Sign in to save workflows" />
+        <PageHeader
+          title="Sign in"
+          description="Sign in to run documents, save workflows, and sync results."
+        />
         <main className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-[480px] space-y-4">
-            <AccountCard title="Sign in">
+            <AccountCard title="Continue with Google">
               <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  You can browse templates on the home page without an account.
+                  Sign in when you&apos;re ready to upload and run.
+                </p>
                 <GoogleSignInButton
                   onCredential={handleGoogleCredential}
                   disabled={loading}
@@ -220,6 +227,11 @@ export default function AccountPage() {
                 )}
               </div>
             </AccountCard>
+            <p className="text-center text-sm text-muted-foreground">
+              <Link href="/" className="text-primary hover:underline">
+                Back to home
+              </Link>
+            </p>
           </div>
         </main>
       </div>
