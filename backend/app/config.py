@@ -88,8 +88,12 @@ class Settings(BaseSettings):
     # Data persistence: auto | memory | supabase
     persistence_backend: str = "auto"
 
-    # Auth: email = lookup by email (no password); supabase = future Supabase Auth
+    # Auth: email = lookup by email (no password); Google uses POST /api/auth/google
     auth_backend: str = "email"
+    # Allow passwordless email session (local/tests only). Production should be false.
+    auth_allow_email: bool = False
+    # Google Identity Services OAuth Web client ID (ID token audience)
+    google_client_id: str = ""
 
     # Email delivery (Resend)
     resend_api_key: str = ""

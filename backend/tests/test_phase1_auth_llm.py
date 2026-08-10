@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_repo
+from app.config import settings
 from app.main import app
 from app.models.domain.user import UserRecord
 from app.persistence.memory_repository import MemoryRepository
@@ -28,7 +29,8 @@ def test_decode_invalid_token_raises():
         pass
 
 
-def test_session_returns_jwt_token():
+def test_session_returns_jwt_token(monkeypatch):
+    monkeypatch.setattr(settings, "auth_allow_email", True)
     repo = MemoryRepository()
     app.dependency_overrides[get_repo] = lambda: repo
     try:

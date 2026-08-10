@@ -18,7 +18,7 @@ import {
   type PipelineTemplateSummary,
 } from "@/lib/api";
 import { toastError } from "@/lib/toast";
-import { ensureUser } from "@/lib/user-session";
+import { ensureUser, SignInRequiredError } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
 export default function HomePage() {
@@ -61,9 +61,16 @@ export default function HomePage() {
   }
 
   function handleApiError(err: unknown) {
+    if (err instanceof SignInRequiredError) {
+      toastError("Sign in to continue.");
+      router.push("/account");
+      return;
+    }
     if (err instanceof ApiError) {
       switch (err.status) {
         case 401:
+          toastError("Sign in to continue.");
+          router.push("/account");
           break;
         case 429:
           setUsageLimitMsg(err.message);

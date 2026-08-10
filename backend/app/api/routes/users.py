@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.dependencies import AuthServiceDep, CurrentUserDep, UserServiceDep, WorkflowServiceDep
 from app.api.ownership import require_self
+from app.config import settings
 from app.models.api.users import UserCreateRequest, UserResponse
 from app.models.api.workflows import WorkflowSummaryResponse
 from app.services.usage.metering import get_usage_summary
@@ -17,6 +18,11 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 @router.post("", response_model=UserResponse)
 async def register_user(body: UserCreateRequest, auth: AuthServiceDep) -> UserResponse:
     """Create or restore a user by email (delegates to auth service)."""
+    if not settings.auth_allow_email:
+        raise HTTPException(
+            status_code=403,
+            detail="Email sign-in is disabled. Use Google sign-in.",
+        )
     if not body.email.strip():
         raise HTTPException(status_code=400, detail="Email is required")
 
