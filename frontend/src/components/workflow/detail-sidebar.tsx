@@ -67,10 +67,14 @@ export function DetailSidebar({
       <section className="space-y-2">
         <h3 className="v2-section-title">Output paths</h3>
         <div className="rounded-md px-3 py-2 text-xs bg-green-50 text-green-800">
-          Email — configure in settings
+          {workflow.default_email?.trim()
+            ? `Email — ${workflow.default_email.trim()}`
+            : "Email — configure in settings"}
         </div>
         <div className="rounded-md px-3 py-2 text-xs bg-blue-50 text-blue-800">
-          Push to Sheets — configure in settings
+          {workflow.default_sheets_url?.trim()
+            ? "Push to Sheets — configured"
+            : "Push to Sheets — configure in settings"}
         </div>
       </section>
 

@@ -194,6 +194,11 @@ export default function WorkflowSettingsPage() {
           </AccountCard>
 
           <AccountCard title="Default Delivery">
+            <p className="text-sm text-muted-foreground">
+              When set, results are emailed and/or pushed to Sheets automatically
+              after every successful run of this workflow. You can still use
+              Export on a run to send to any other destination.
+            </p>
             <div className="space-y-2">
               <Label htmlFor="email">Email recipient</Label>
               <Input
@@ -209,6 +214,7 @@ export default function WorkflowSettingsPage() {
                 id="sheets"
                 value={sheetsUrl}
                 onChange={(e) => setSheetsUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
               />
             </div>
             <div className="space-y-2">
