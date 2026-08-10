@@ -3,6 +3,7 @@ import { Inter, Source_Serif_4 } from "next/font/google";
 import { Toaster } from "sonner";
 
 import { NavBar } from "@/components/nav-bar";
+import { SignInProvider } from "@/hooks/use-sign-in";
 import { UserProvider } from "@/hooks/use-user";
 import { cn } from "@/lib/utils";
 
@@ -40,13 +41,15 @@ export default function RootLayout({
         )}
       >
         <UserProvider>
-          <div className="flex h-screen flex-col overflow-hidden bg-background">
-            <NavBar />
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {children}
+          <SignInProvider>
+            <div className="flex h-screen flex-col overflow-hidden bg-background">
+              <NavBar />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {children}
+              </div>
             </div>
-          </div>
-          <Toaster richColors position="top-right" closeButton />
+            <Toaster richColors position="top-right" closeButton />
+          </SignInProvider>
         </UserProvider>
       </body>
     </html>

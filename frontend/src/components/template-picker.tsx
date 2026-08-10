@@ -26,6 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useSignIn } from "@/hooks/use-sign-in";
 import {
   ApiError,
   getTemplate,
@@ -35,6 +36,7 @@ import {
   type PipelineTemplate,
   type PipelineTemplateSummary,
 } from "@/lib/api";
+import { savePendingRun } from "@/lib/pending-run";
 import { toastError } from "@/lib/toast";
 import { ensureUser, SignInRequiredError } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
@@ -178,6 +180,7 @@ export function TemplatePickerSection({
   disabled,
 }: TemplatePickerProps) {
   const router = useRouter();
+  const { openSignIn } = useSignIn();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const [usageLimitMsg, setUsageLimitMsg] = useState("");
@@ -199,15 +202,15 @@ export function TemplatePickerSection({
       const run = await runTemplate(upload.upload_id, "invoice");
       router.push(`/results/${run.run_id}`);
     } catch (e) {
-      if (e instanceof SignInRequiredError) {
-        toastError("Sign in to continue.");
-        router.push("/account");
+      if (e instanceof SignInRequiredError || (e instanceof ApiError && e.status === 401)) {
+        try {
+          await savePendingRun({ kind: "sample" });
+        } catch {
+          /* best-effort */
+        }
+        openSignIn();
       } else if (e instanceof ApiError) {
         switch (e.status) {
-          case 401:
-            toastError("Sign in to continue.");
-            router.push("/account");
-            break;
           case 429:
             setUsageLimitMsg(e.message);
             setShowUsageLimit(true);

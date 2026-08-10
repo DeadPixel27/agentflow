@@ -25,6 +25,17 @@ export function clearAccessToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+/** Fired when a stored JWT is rejected so UI can open the sign-in dialog. */
+export const SESSION_EXPIRED_EVENT = "agentflow:session-expired";
+
+function clearLocalSessionAndPromptSignIn(): void {
+  clearAccessToken();
+  localStorage.removeItem("agentflow_user_id");
+  localStorage.removeItem("agentflow_user_name");
+  localStorage.removeItem("agentflow_user_email");
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   const token = getAccessToken();
@@ -41,14 +52,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // ignore
     }
 
-    // Auto-redirect only when a sent token was rejected (expired session).
+    // Prompt sign-in dialog when a sent token was rejected (expired session).
     // Unsigned callers (no token) should stay on the current page.
     if (res.status === 401 && typeof window !== "undefined" && token) {
-      clearAccessToken();
-      localStorage.removeItem("agentflow_user_id");
-      localStorage.removeItem("agentflow_user_name");
-      localStorage.removeItem("agentflow_user_email");
-      window.location.href = "/account";
+      clearLocalSessionAndPromptSignIn();
       throw new ApiError("Session expired. Please sign in again.", 401);
     }
 
@@ -512,11 +519,7 @@ export async function deleteWorkflow(workflowId: string): Promise<void> {
       // ignore
     }
     if (res.status === 401 && typeof window !== "undefined" && token) {
-      clearAccessToken();
-      localStorage.removeItem("agentflow_user_id");
-      localStorage.removeItem("agentflow_user_name");
-      localStorage.removeItem("agentflow_user_email");
-      window.location.href = "/account";
+      clearLocalSessionAndPromptSignIn();
       throw new ApiError("Session expired. Please sign in again.", 401);
     }
     throw new ApiError(String(detail), res.status);

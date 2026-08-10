@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError, getUserUsage, type UsageSummary } from "@/lib/api";
+import { hasPendingRun } from "@/lib/pending-run";
+import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
   clearStoredUser,
@@ -105,13 +107,32 @@ export default function AccountPage() {
   }
 
   const finishSignIn = useCallback(
-    (signedIn: { name: string }, isNewUser: boolean) => {
+    async (signedIn: { name: string }, isNewUser: boolean) => {
       toastSuccess(
         isNewUser
           ? `Welcome, ${signedIn.name}!`
           : `Welcome back, ${signedIn.name}!`,
       );
-      router.push("/workflows");
+
+      if (!hasPendingRun()) {
+        return;
+      }
+
+      try {
+        const runId = await resumePendingRun();
+        if (runId) {
+          router.push(`/results/${runId}`);
+        }
+      } catch (err) {
+        toastError(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Could not start your run. Try again from home.",
+        );
+        router.push("/");
+      }
     },
     [router],
   );
@@ -130,7 +151,7 @@ export default function AccountPage() {
     try {
       const { user: signedIn, isNewUser } = await signInUser(name, email);
       setUser(signedIn);
-      finishSignIn(signedIn, isNewUser);
+      await finishSignIn(signedIn, isNewUser);
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : "Failed to sign in.");
     } finally {
@@ -144,7 +165,7 @@ export default function AccountPage() {
       try {
         const { user: signedIn, isNewUser } = await signInWithGoogle(idToken);
         setUser(signedIn);
-        finishSignIn(signedIn, isNewUser);
+        await finishSignIn(signedIn, isNewUser);
       } catch (err) {
         toastError(
           err instanceof ApiError ? err.message : "Google sign-in failed.",

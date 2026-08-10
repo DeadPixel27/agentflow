@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useSignIn } from "@/hooks/use-sign-in";
 import { useUser } from "@/hooks/use-user";
 import {
   ApiError,
@@ -101,6 +102,7 @@ function WorkflowCard({
 
 export default function WorkflowsPage() {
   const { user, ready } = useUser();
+  const { openSignIn } = useSignIn();
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -142,9 +144,9 @@ export default function WorkflowsPage() {
             <p className="text-muted-foreground text-sm">
               Sign in to save and view workflows.
             </p>
-            <Link href="/account" className={cn(buttonVariants())}>
-              Go to account
-            </Link>
+            <Button type="button" onClick={openSignIn}>
+              Sign in
+            </Button>
           </div>
         )}
 

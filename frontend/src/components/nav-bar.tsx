@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { useSignIn } from "@/hooks/use-sign-in";
 import { useUser } from "@/hooks/use-user";
 import { clearStoredUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, setUser } = useUser();
+  const { openSignIn } = useSignIn();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -128,12 +130,13 @@ export function NavBar() {
               )}
             </>
           ) : (
-            <Link
-              href="/account"
+            <button
+              type="button"
+              onClick={openSignIn}
               className="text-[13px] font-medium text-primary hover:underline"
             >
               Sign in
-            </Link>
+            </button>
           )}
         </div>
       </div>
