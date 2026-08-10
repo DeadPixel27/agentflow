@@ -14,6 +14,35 @@ import { StepStatusList } from "@/components/run-display";
 import { TopBar } from "@/components/top-bar";
 import { getUploadDocuments, type RunResponse } from "@/lib/api";
 
+const STORAGE_NAME_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]+)?$/i;
+
+function looksLikeStorageName(name: string): boolean {
+  return STORAGE_NAME_RE.test(name);
+}
+
+function pickDisplayName(...candidates: Array<string | undefined | null>): string | undefined {
+  const usable = candidates
+    .map((c) => (typeof c === "string" ? c.trim() : ""))
+    .filter(Boolean);
+  return (
+    usable.find((name) => !looksLikeStorageName(name)) ?? usable[0] ?? undefined
+  );
+}
+
+function formatRunTime(createdAt: string | null | undefined): string | null {
+  if (!createdAt) return null;
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function PipelinePanel({
   isRunning,
   title = "Pipeline",
@@ -150,15 +179,33 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
   const docSourceRun = hasCompletedResults ? displayRun : run;
   const fallbackMethod = inferPipelineExtractionMethod(displayRun ?? run);
   const validationWarnings = displayRun?.result?.validation_warnings;
-  const files = useMemo(
-    () =>
-      (docSourceRun?.document_ids ?? []).map((id) => ({
-        id,
-        name: docNames[id] ?? id.slice(0, 8),
-        warningCount: validationWarnings?.[id]?.length ?? 0,
-      })),
-    [docSourceRun?.document_ids, docNames, validationWarnings],
-  );
+  const files = useMemo(() => {
+    const fromDocs: Record<string, string> = {};
+    for (const doc of docSourceRun?.documents ?? []) {
+      if (doc.document_id && doc.filename) {
+        fromDocs[doc.document_id] = doc.filename;
+      }
+    }
+    const fromRows: Record<string, string> = {};
+    for (const row of rows) {
+      const id = typeof row.document_id === "string" ? row.document_id : "";
+      const name = typeof row.filename === "string" ? row.filename : "";
+      if (id && name) fromRows[id] = name;
+    }
+    return (docSourceRun?.document_ids ?? []).map((id) => ({
+      id,
+      name:
+        pickDisplayName(fromDocs[id], fromRows[id], docNames[id]) ??
+        id.slice(0, 8),
+      warningCount: validationWarnings?.[id]?.length ?? 0,
+    }));
+  }, [
+    docSourceRun?.document_ids,
+    docSourceRun?.documents,
+    rows,
+    docNames,
+    validationWarnings,
+  ]);
   const totalWarnings = useMemo(
     () =>
       Object.values(validationWarnings ?? {}).reduce(
@@ -194,7 +241,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
     ? [
         displayRun.task_description,
         `${displayRun.document_ids.length} documents`,
-        displayRun.run_id.slice(0, 8),
+        formatRunTime(displayRun.created_at),
       ]
         .filter(Boolean)
         .join(" · ")
@@ -290,7 +337,11 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
                 <DocumentTabPanel
                   uploadId={displayRun.upload_id}
                   documentId={selectedDocId}
-                  filename={docNames[selectedDocId] ?? "Document"}
+                  filename={
+                    files.find((f) => f.id === selectedDocId)?.name ??
+                    docNames[selectedDocId] ??
+                    "Document"
+                  }
                   fileType={docTypes[selectedDocId]}
                   extractionMethod={
                     docMethods[selectedDocId] ?? fallbackMethod

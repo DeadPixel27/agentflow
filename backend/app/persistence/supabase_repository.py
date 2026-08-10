@@ -196,6 +196,7 @@ class SupabaseRepository:
             result=row.get("result"),
             error_message=row.get("error_message"),
             user_id=row.get("user_id"),
+            created_at=row.get("created_at"),
         )
 
     def count_child_runs(self, parent_run_id: str) -> int:

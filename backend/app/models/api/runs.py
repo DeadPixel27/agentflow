@@ -74,12 +74,18 @@ class StepRunResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class RunDocumentSummary(BaseModel):
+    document_id: str
+    filename: str = ""
+
+
 class RunResponse(BaseModel):
     run_id: str
     upload_id: str
     task_description: str
     status: str
     document_ids: list[str] = Field(default_factory=list)
+    documents: list[RunDocumentSummary] = Field(default_factory=list)
     steps: list[StepRunResponse]
     planned_steps: list[PlannedStepResponse] = Field(default_factory=list)
     workflow_id: Optional[str] = None
@@ -90,6 +96,7 @@ class RunResponse(BaseModel):
     refine_summary: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class RunRefineResponse(BaseModel):

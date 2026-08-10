@@ -49,7 +49,11 @@ class MemoryRepository:
 
     def list_runs_by_workflow(self, workflow_id: str) -> list[RunResult]:
         runs = [run for run in self._runs.values() if run.workflow_id == workflow_id]
-        return sorted(runs, key=lambda run: run.run_id, reverse=True)
+        return sorted(
+            runs,
+            key=lambda run: run.created_at or run.run_id,
+            reverse=True,
+        )
 
     def count_child_runs(self, parent_run_id: str) -> int:
         return sum(

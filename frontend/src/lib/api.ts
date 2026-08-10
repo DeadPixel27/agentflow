@@ -149,12 +149,18 @@ export interface RunResult {
   validation_warnings?: Record<string, ValidationWarning[]>;
 }
 
+export interface RunDocumentSummary {
+  document_id: string;
+  filename: string;
+}
+
 export interface RunResponse {
   run_id: string;
   upload_id: string;
   task_description: string;
   status: string;
   document_ids: string[];
+  documents?: RunDocumentSummary[];
   steps: StepRun[];
   planned_steps: PlannedStep[];
   workflow_id: string | null;
@@ -165,6 +171,7 @@ export interface RunResponse {
   refine_summary?: string | null;
   result: RunResult | null;
   error_message: string | null;
+  created_at?: string | null;
 }
 
 export interface RunRefineResponse {

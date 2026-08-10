@@ -34,3 +34,4 @@ class RunResult:
     result: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     user_id: Optional[str] = None
+    created_at: Optional[str] = None

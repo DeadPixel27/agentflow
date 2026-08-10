@@ -43,16 +43,6 @@ export function ExportBar({
   return (
     <>
       <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2">
-        {saveAction === "workflow" && (
-          <Button size="sm" onClick={() => setShowSave(true)}>
-            Save as Workflow
-          </Button>
-        )}
-        {saveAction === "version" && workflowId && (
-          <Button size="sm" onClick={() => setShowVersion(true)}>
-            Save as New Version
-          </Button>
-        )}
         <Button
           variant="outline"
           size="sm"
@@ -77,6 +67,20 @@ export function ExportBar({
         <Button variant="outline" size="sm" onClick={() => setShowSheets(true)}>
           Sheets
         </Button>
+        {saveAction === "workflow" && (
+          <Button size="sm" className="ml-auto" onClick={() => setShowSave(true)}>
+            Save as Workflow
+          </Button>
+        )}
+        {saveAction === "version" && workflowId && (
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() => setShowVersion(true)}
+          >
+            Save as New Version
+          </Button>
+        )}
       </div>
 
       <SaveWorkflowModal
