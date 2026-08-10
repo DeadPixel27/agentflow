@@ -88,11 +88,28 @@ async def push_rows_to_sheet(
         except Exception:
             pass
 
-        service.spreadsheets().values().update(
+        existing = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=_a1_range(sheet_name))
+            .execute()
+        )
+        has_data = bool(existing.get("values"))
+        # Append rows; include header only when the tab is empty.
+        body_values = values if not has_data else values[1:]
+        if not body_values:
+            return SheetsPushResult(
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name,
+                rows_written=0,
+            )
+
+        service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
             range=_a1_range(sheet_name),
             valueInputOption="USER_ENTERED",
-            body={"values": values},
+            insertDataOption="INSERT_ROWS",
+            body={"values": body_values},
         ).execute()
 
         logger.info("Pushed %d rows to sheet %s", len(rows), spreadsheet_id)

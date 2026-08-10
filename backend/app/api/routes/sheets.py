@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.api.dependencies import CurrentUserDep, RepoDep
+from app.api.ownership import require_run_access
 from app.models.api.sheets import SheetsPushRequest, SheetsPushResponse
 from app.models.domain.sheets import SheetsError
 from app.services.sheets.sheets_service import push_rows_to_sheet
@@ -20,6 +21,7 @@ async def push_run_to_sheets(
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    await require_run_access(run, current_user, repo)
     if run.status != "completed":
         raise HTTPException(status_code=400, detail="Run is not completed yet")
 

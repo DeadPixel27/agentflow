@@ -301,15 +301,14 @@ async def execute_run(run_id: str) -> None:
         }
 
     logger.info("Run %s completed — %d row(s)", run_id, len(ctx.data.get("rows", [])))
-    save_run(
-        replace(
-            run,
-            status="completed",
-            steps=step_runs,
-            result=final_output,
-            cached_documents=_snapshot_documents(ctx.data.get("documents", [])),
-        )
+    completed_run = replace(
+        run,
+        status="completed",
+        steps=step_runs,
+        result=final_output,
+        cached_documents=_snapshot_documents(ctx.data.get("documents", [])),
     )
+    save_run(completed_run)
     try:
         await log_event(
             "run_completed",
@@ -321,6 +320,16 @@ async def execute_run(run_id: str) -> None:
         )
     except Exception:
         pass
+
+    try:
+        from app.services.email.workflow_delivery import deliver_workflow_defaults
+
+        rows = []
+        if isinstance(final_output, dict):
+            rows = final_output.get("rows") or []
+        await deliver_workflow_defaults(completed_run, rows)
+    except Exception:
+        logger.exception("Workflow default delivery failed for run %s", run_id)
 
 
 async def run_pipeline(

@@ -34,3 +34,6 @@ frontend-v2-opus4.6/
 frontend-v3-opus4.6/
 backend-v2-opus4.6/
 backend-v3-opus4.6/
+
+# Google service account keys (never commit)
+backend/secrets/
