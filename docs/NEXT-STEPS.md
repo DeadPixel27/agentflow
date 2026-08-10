@@ -25,9 +25,10 @@ Launch product through V3 + launch features is built. Recent ship: side-by-side 
 
 | # | Task | Est. | Notes |
 |---|------|------|-------|
-| 1 | **Deploy** | ~4h | Supabase + Railway (backend) + Vercel (frontend) + domain + smoke test. |
-| 2 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy **before** any hardening. |
-| 3 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README with screenshots + live URL. |
+| 1 | **Confirm + enforce hard usage caps per feature** | ~3–4h | Audit free-tier limits end-to-end and set hard caps (not soft warnings only) for every billable/abusable surface: **extract / runs (pages)**, **refine**, **emails sent**, **Sheets uploads/pushes**, and related API rate limits. Confirm monthly + daily global ceilings in config match product intent; enforce 429s consistently; surface clear limit UI. For **refine**, add an out-of-scope prompt filter so misuse / off-topic queries are rejected before LLM spend. |
+| 2 | **Deploy** | ~4h | Supabase + Railway (backend) + Vercel (frontend) + domain + smoke test. |
+| 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy **before** any hardening. |
+| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README with screenshots + live URL. |
 
 ---
 
@@ -53,4 +54,4 @@ Launch product through V3 + launch features is built. Recent ship: side-by-side 
 
 ## Immediate next action
 
-Start **#1 Deploy**.
+Start **#1 Confirm + enforce hard usage caps per feature** (including refine out-of-scope filter), then **#2 Deploy**.
