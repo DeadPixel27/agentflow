@@ -4,11 +4,12 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ExportBar } from "@/components/export-bar";
+import { ALL_RESULTS_ID } from "@/components/results/all-results-id";
 import { DocumentTabPanel } from "@/components/results/document-tab";
+import { DocResultsPane } from "@/components/results/doc-results-pane";
 import { DocsPanel } from "@/components/results/docs-panel";
 import { ResultsTabPanel } from "@/components/results/results-tab";
 import { useRunResultsContext } from "@/components/results/run-results-context";
-import { TabSwitcher, type ResultsTab } from "@/components/results/tab-switcher";
 import { StepStatusList } from "@/components/run-display";
 import { TopBar } from "@/components/top-bar";
 import { getUploadDocuments, type RunResponse } from "@/lib/api";
@@ -65,6 +66,14 @@ function inferPipelineExtractionMethod(
   return undefined;
 }
 
+function flagCountForRows(rows: Record<string, unknown>[]): number {
+  return rows.reduce((count, row) => {
+    const flags = row.flags;
+    if (Array.isArray(flags)) return count + flags.length;
+    return count;
+  }, 0);
+}
+
 interface RunResultsFrameProps {
   refinePanel: ReactNode;
 }
@@ -74,10 +83,10 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
     useRunResultsContext();
   const { run, isRunning, loading, error } = runState;
 
-  const [activeTab, setActiveTab] = useState<ResultsTab>("results");
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(ALL_RESULTS_ID);
   const [docNames, setDocNames] = useState<Record<string, string>>({});
   const [docMethods, setDocMethods] = useState<Record<string, string>>({});
+  const [docTypes, setDocTypes] = useState<Record<string, string>>({});
   const [refineUnlocked, setRefineUnlocked] = useState(false);
   const [lastCompletedRun, setLastCompletedRun] = useState(
     run?.status === "completed" ? run : null,
@@ -97,11 +106,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
   const displayRun =
     run?.status === "completed" ? run : (lastCompletedRun ?? run);
   const rows = displayRun?.result?.rows ?? [];
-  const flagCount = rows.reduce((count, row) => {
-    const flags = row.flags;
-    if (Array.isArray(flags)) return count + flags.length;
-    return count;
-  }, 0);
+  const flagCount = flagCountForRows(rows);
 
   const hasCompletedResults =
     refineUnlocked && displayRun?.status === "completed";
@@ -121,24 +126,26 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
     if (!uploadId) return;
     getUploadDocuments(uploadId)
       .then((res) => {
-        const map: Record<string, string> = {};
+        const names: Record<string, string> = {};
         const methods: Record<string, string> = {};
+        const types: Record<string, string> = {};
         for (const doc of res.documents) {
-          map[doc.document_id] = doc.filename;
+          names[doc.document_id] = doc.filename;
           if (doc.extraction_method) {
             methods[doc.document_id] = doc.extraction_method;
           }
+          if (doc.file_type) {
+            types[doc.document_id] = doc.file_type;
+          }
         }
-        setDocNames(map);
+        setDocNames(names);
         setDocMethods(methods);
-        if (res.documents[0] && !selectedDocId) {
-          setSelectedDocId(res.documents[0].document_id);
-        }
+        setDocTypes(types);
       })
       .catch(() => {
         /* optional */
       });
-  }, [uploadId, selectedDocId]);
+  }, [uploadId]);
 
   const docSourceRun = hasCompletedResults ? displayRun : run;
   const fallbackMethod = inferPipelineExtractionMethod(displayRun ?? run);
@@ -162,6 +169,15 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
   );
 
   const showDocsPanel = files.length > 0;
+  const showingAll = selectedId === ALL_RESULTS_ID;
+  const selectedDocId = showingAll ? null : selectedId;
+
+  const docRows = useMemo(() => {
+    if (!selectedDocId) return [];
+    return rows.filter((row) => row.document_id === selectedDocId);
+  }, [rows, selectedDocId]);
+
+  const docFlagCount = flagCountForRows(docRows);
 
   const statusBadge =
     displayRun?.status === "completed" ? (
@@ -240,14 +256,9 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
         {showDocsPanel && (
           <DocsPanel
             files={files}
-            selectedId={selectedDocId}
+            selectedId={selectedId}
             totalWarnings={totalWarnings}
-            onSelect={(id) => {
-              setSelectedDocId(id);
-              if (!showPipelineProgress) {
-                setActiveTab("document");
-              }
-            }}
+            onSelect={setSelectedId}
           />
         )}
 
@@ -255,7 +266,9 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
           {isRerunning && (
             <div className="shrink-0 flex items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Re-running extraction with your refinements...</span>
+              <span>
+                Re-running extraction for all documents with your refinements…
+              </span>
             </div>
           )}
           {showPipelineProgress ? (
@@ -263,32 +276,38 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
               isRunning={isRunning}
               title={hasCompletedResults ? "Re-running" : "Pipeline"}
             />
+          ) : showingAll || !selectedDocId ? (
+            <ResultsTabPanel
+              rows={rows}
+              flagCount={flagCount}
+              isUpdating={isRerunning}
+              fieldConfidence={displayRun?.result?.field_confidence}
+              validationWarnings={displayRun?.result?.validation_warnings}
+            />
           ) : (
-            <>
-              <TabSwitcher active={activeTab} onChange={setActiveTab} />
-              {activeTab === "results" ? (
-                <ResultsTabPanel
-                  rows={rows}
-                  flagCount={flagCount}
-                  isUpdating={isRerunning}
-                  fieldConfidence={displayRun?.result?.field_confidence}
-                  validationWarnings={displayRun?.result?.validation_warnings}
-                />
-              ) : selectedDocId ? (
+            <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+              <div className="flex flex-col min-h-0 min-w-0 md:w-1/2 md:max-w-[50%] h-[45vh] md:h-auto">
                 <DocumentTabPanel
                   uploadId={displayRun.upload_id}
                   documentId={selectedDocId}
                   filename={docNames[selectedDocId] ?? "Document"}
+                  fileType={docTypes[selectedDocId]}
                   extractionMethod={
                     docMethods[selectedDocId] ?? fallbackMethod
                   }
                 />
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                  Select a document from the strip.
-                </div>
-              )}
-            </>
+              </div>
+              <DocResultsPane
+                rows={docRows}
+                flagCount={docFlagCount}
+                isUpdating={isRerunning}
+                fieldConfidence={displayRun?.result?.field_confidence}
+                validationWarnings={
+                  displayRun?.result?.validation_warnings?.[selectedDocId]
+                }
+                documentWarnings={displayRun?.result?.validation_warnings}
+              />
+            </div>
           )}
         </div>
         {refinePanel}

@@ -214,7 +214,10 @@ export function RefineChatPanel({
     setApplying(true);
     setHistory((prev) => [
       ...prev,
-      { role: "assistant", text: "⏳ Applying changes and re-running extraction..." },
+      {
+        role: "assistant",
+        text: "⏳ Applying changes and re-running extraction for all documents...",
+      },
     ]);
 
     try {
@@ -354,6 +357,15 @@ export function RefineChatPanel({
           </Button>
         )}
       </div>
+      {readyToApply && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Apply updates the shared extraction rules and re-runs{" "}
+          <span className="font-medium text-foreground">
+            all documents in this run
+          </span>
+          .
+        </p>
+      )}
     </div>
   );
 
@@ -363,7 +375,8 @@ export function RefineChatPanel({
         <div className="shrink-0 p-4 border-b border-border space-y-2">
           <h2 className="font-serif text-base font-semibold">Refine</h2>
           <p className="text-xs text-muted-foreground">
-            Tell me what to change — I&apos;ll plan first, then apply.
+            Tell me what to change — I&apos;ll plan first, then apply to all
+            documents in this run.
           </p>
           <RefineSaveDisclaimer saveAction={saveAction} />
         </div>
