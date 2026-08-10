@@ -41,8 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // ignore
     }
 
-    // Auto-redirect to sign-in on 401 (expired/invalid token)
-    if (res.status === 401 && typeof window !== "undefined") {
+    // Auto-redirect only when a sent token was rejected (expired session).
+    // Unsigned callers (no token) should stay on the current page.
+    if (res.status === 401 && typeof window !== "undefined" && token) {
       clearAccessToken();
       localStorage.removeItem("agentflow_user_id");
       localStorage.removeItem("agentflow_user_name");
@@ -510,7 +511,7 @@ export async function deleteWorkflow(workflowId: string): Promise<void> {
     } catch {
       // ignore
     }
-    if (res.status === 401 && typeof window !== "undefined") {
+    if (res.status === 401 && typeof window !== "undefined" && token) {
       clearAccessToken();
       localStorage.removeItem("agentflow_user_id");
       localStorage.removeItem("agentflow_user_name");

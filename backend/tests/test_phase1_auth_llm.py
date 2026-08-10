@@ -2,11 +2,12 @@
 
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_repo
+from app.api.dependencies import get_repo, get_template_repo
 from app.config import settings
 from app.main import app
 from app.models.domain.user import UserRecord
 from app.persistence.memory_repository import MemoryRepository
+from app.persistence.templates.memory_repository import MemoryTemplateRepository
 from app.services.auth.jwt import InvalidTokenError, create_access_token, decode_access_token
 from app.services.llm.router import LLMTask
 from tests.auth_helpers import override_current_user
@@ -55,7 +56,7 @@ def test_health_is_public():
 
 
 def test_protected_route_requires_auth():
-    response = client.get("/api/templates")
+    response = client.get("/api/workflows")
     assert response.status_code == 401
 
 
@@ -67,10 +68,9 @@ def test_protected_route_accepts_bearer_token():
     try:
         token = create_access_token(user.user_id, user.email)
         response = client.get(
-            "/api/templates",
+            "/api/workflows",
             headers={"Authorization": f"Bearer {token}"},
         )
-        # 200 if templates seeded, or still auth-ok (not 401)
         assert response.status_code != 401
         assert response.status_code in (200, 500)
     finally:
@@ -84,7 +84,7 @@ def test_protected_route_accepts_query_access_token():
     app.dependency_overrides[get_repo] = lambda: repo
     try:
         token = create_access_token(user.user_id, user.email)
-        response = client.get(f"/api/templates?access_token={token}")
+        response = client.get(f"/api/workflows?access_token={token}")
         assert response.status_code != 401
     finally:
         app.dependency_overrides.clear()
@@ -92,10 +92,21 @@ def test_protected_route_accepts_query_access_token():
 
 def test_invalid_bearer_token_returns_401():
     response = client.get(
-        "/api/templates",
+        "/api/workflows",
         headers={"Authorization": "Bearer totally-bogus"},
     )
     assert response.status_code == 401
+
+
+def test_templates_catalog_is_public():
+    memory = MemoryTemplateRepository()
+    app.dependency_overrides[get_template_repo] = lambda: memory
+    try:
+        response = client.get("/api/templates")
+        assert response.status_code == 200
+        assert response.json()["count"] >= 1
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_router_task_enum_values():
@@ -117,9 +128,12 @@ def test_field_extractor_imports_router():
 
 
 def test_override_current_user_helper_works():
+    repo = MemoryRepository()
+    repo.save_user(UserRecord(user_id="user-1", name="Test", email="test@example.com"))
+    app.dependency_overrides[get_repo] = lambda: repo
     override_current_user()
     try:
-        response = client.get("/api/templates")
+        response = client.get("/api/workflows")
         assert response.status_code != 401
     finally:
         app.dependency_overrides.clear()

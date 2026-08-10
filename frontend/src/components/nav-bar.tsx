@@ -25,7 +25,7 @@ function initials(name: string): string {
 export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useUser();
+  const { user, setUser } = useUser();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -41,9 +41,9 @@ export function NavBar() {
 
   function handleSignOut() {
     clearStoredUser();
+    setUser(null);
     setOpen(false);
     router.push("/");
-    router.refresh();
   }
 
   return (
