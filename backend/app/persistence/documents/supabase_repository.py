@@ -14,6 +14,15 @@ from app.models.domain.document import (
     StoredDocument,
     UploadNotFoundError,
 )
+from app.persistence.documents.manifest import (
+    MANIFEST_FILENAME,
+    empty_manifest,
+    is_manifest_filename,
+    manifest_to_bytes,
+    original_filenames_map,
+    parse_manifest,
+    upsert_manifest_entry,
+)
 from app.persistence.documents.validation import (
     media_type_for,
     validate_file_content,
@@ -35,6 +44,37 @@ class SupabaseDocumentRepository:
     def _object_path(self, upload_id: str, filename: str) -> str:
         return f"{upload_id}/{filename}"
 
+    def _read_manifest(self, upload_id: str) -> dict:
+        path = self._object_path(upload_id, MANIFEST_FILENAME)
+        try:
+            data = get_supabase_client().storage.from_(self._bucket()).download(path)
+        except Exception:
+            return empty_manifest()
+        return parse_manifest(data)
+
+    def _write_manifest(self, upload_id: str, manifest: dict) -> None:
+        path = self._object_path(upload_id, MANIFEST_FILENAME)
+        get_supabase_client().storage.from_(self._bucket()).upload(
+            path,
+            manifest_to_bytes(manifest),
+            file_options={
+                "content-type": "application/json",
+                "upsert": "true",
+            },
+        )
+
+    def _record_original_filename(
+        self, upload_id: str, document_id: str, original_filename: str
+    ) -> None:
+        if not original_filename:
+            return
+        manifest = upsert_manifest_entry(
+            self._read_manifest(upload_id),
+            document_id,
+            original_filename,
+        )
+        self._write_manifest(upload_id, manifest)
+
     async def save_document(self, upload_id: str, file: UploadFile) -> StoredDocument:
         validate_upload_file(file)
 
@@ -55,6 +95,9 @@ class SupabaseDocumentRepository:
             },
         )
 
+        original = file.filename or object_name
+        self._record_original_filename(upload_id, document_id, original)
+
         return StoredDocument(
             document_id=document_id,
             filename=object_name,
@@ -72,16 +115,17 @@ class SupabaseDocumentRepository:
         if not entries:
             raise UploadNotFoundError(f"Upload not found: {upload_id}")
 
+        names = original_filenames_map(self._read_manifest(upload_id))
         documents: list[DocumentMetadata] = []
         for entry in entries:
             name = entry.get("name") if isinstance(entry, dict) else getattr(entry, "name", None)
-            if not name or name.startswith("."):
+            if not name or name.startswith(".") or is_manifest_filename(name):
                 continue
             path = Path(name)
             documents.append(
                 DocumentMetadata(
                     document_id=path.stem,
-                    filename=name,
+                    filename=names.get(path.stem, name),
                     file_type=path.suffix.lower(),
                     storage_key=self._object_path(upload_id, name),
                 )
@@ -96,10 +140,17 @@ class SupabaseDocumentRepository:
             return False
 
     async def _resolve_object_name(self, upload_id: str, document_id: str) -> str:
-        documents = await self.list_documents(upload_id)
-        for doc in documents:
-            if doc.document_id == document_id:
-                return doc.filename
+        try:
+            entries = get_supabase_client().storage.from_(self._bucket()).list(upload_id)
+        except Exception as e:
+            raise UploadNotFoundError(f"Upload not found: {upload_id}") from e
+
+        for entry in entries or []:
+            name = entry.get("name") if isinstance(entry, dict) else getattr(entry, "name", None)
+            if not name or is_manifest_filename(name):
+                continue
+            if Path(name).stem == document_id:
+                return name
         raise DocumentNotFoundError(
             f"Document not found: {document_id} in upload {upload_id}"
         )
@@ -153,6 +204,8 @@ class SupabaseDocumentRepository:
                 "upsert": "true",
             },
         )
+
+        self._record_original_filename(upload_id, document_id, filename or object_name)
 
         return StoredDocument(
             document_id=document_id,

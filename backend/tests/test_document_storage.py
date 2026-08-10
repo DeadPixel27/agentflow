@@ -29,13 +29,29 @@ async def test_save_list_and_read(store):
     assert saved.document_id
     assert saved.file_type == ".pdf"
     assert saved.storage_key.startswith("batch-1/")
+    # Storage object keeps uuid name
+    assert saved.filename == f"{saved.document_id}.pdf"
 
     docs = await store.list_documents(upload_id)
     assert len(docs) == 1
     assert docs[0].document_id == saved.document_id
+    assert docs[0].filename == "invoice.pdf"
 
     data = await store.read_bytes(upload_id, saved.document_id)
     assert data.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_list_skips_manifest_and_keeps_original_names(store):
+    upload_id = "batch-names"
+    a = await store.save_document(upload_id, _upload_file("Alpha Invoice.pdf"))
+    b = await store.save_document(upload_id, _upload_file("receipt.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 16))
+
+    docs = await store.list_documents(upload_id)
+    by_id = {doc.document_id: doc.filename for doc in docs}
+    assert by_id[a.document_id] == "Alpha Invoice.pdf"
+    assert by_id[b.document_id] == "receipt.png"
+    assert all(doc.filename != "manifest.json" for doc in docs)
 
 
 @pytest.mark.asyncio

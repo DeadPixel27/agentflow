@@ -300,7 +300,11 @@ export function ResultsTable({
     );
   }
 
-  const columns = Object.keys(rows[0]).filter((k) => k !== "flags");
+  const columns = Object.keys(rows[0]).filter(
+    (k) => k !== "flags" && k !== "document_id",
+  );
+
+  const columnLabel = (col: string) => (col === "filename" ? "Document" : col);
 
   return (
     <div className="rounded-lg border overflow-x-auto">
@@ -312,7 +316,7 @@ export function ResultsTable({
                 key={col}
                 className="px-4 py-2 text-left font-medium text-muted-foreground"
               >
-                {col}
+                {columnLabel(col)}
               </th>
             ))}
           </tr>
@@ -330,7 +334,7 @@ export function ResultsTable({
                   <td key={col} className="px-4 py-2 max-w-xs">
                     <span className="inline-flex items-center gap-1.5 max-w-full">
                       <span className="truncate">{formatCell(row[col])}</span>
-                      {col !== "document_id" && col !== "filename" && (
+                      {col !== "filename" && (
                         <>
                           <ConfidenceBadge score={confidence?.[col]} />
                           <FieldWarningIcon

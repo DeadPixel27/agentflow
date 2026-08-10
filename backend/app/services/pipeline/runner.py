@@ -8,6 +8,7 @@ in a background task with progress persisted after each step for polling.
 import logging
 import uuid
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import app.agents.handlers  # noqa: F401 — register agents
@@ -111,6 +112,7 @@ async def start_run(
         cached_documents=cached_documents,
         refine_summary=refine_summary,
         user_id=user_id,
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
     save_run(run)
     logger.info(
