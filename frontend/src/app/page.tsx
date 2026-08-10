@@ -2,14 +2,16 @@
 
 import { ArrowRight, Loader2, Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { UploadZone } from "@/components/upload-zone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSignIn } from "@/hooks/use-sign-in";
 import {
   ApiError,
+  getAccessToken,
   getTemplate,
   listTemplates,
   runAdhoc,
@@ -17,12 +19,15 @@ import {
   uploadFiles,
   type PipelineTemplateSummary,
 } from "@/lib/api";
+import { savePendingRun } from "@/lib/pending-run";
+import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError } from "@/lib/toast";
 import { ensureUser, SignInRequiredError } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
 export default function HomePage() {
   const router = useRouter();
+  const { openSignIn } = useSignIn();
   const [files, setFiles] = useState<File[]>([]);
   const [task, setTask] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
@@ -33,6 +38,7 @@ export default function HomePage() {
   const [phase, setPhase] = useState<string | null>(null);
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const [usageLimitMsg, setUsageLimitMsg] = useState("");
+  const resumeStarted = useRef(false);
 
   useEffect(() => {
     listTemplates()
@@ -60,59 +66,111 @@ export default function HomePage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleApiError(err: unknown) {
-    if (err instanceof SignInRequiredError) {
-      toastError("Sign in to continue.");
-      router.push("/account");
-      return;
-    }
-    if (err instanceof ApiError) {
-      switch (err.status) {
-        case 401:
-          toastError("Sign in to continue.");
-          router.push("/account");
-          break;
-        case 429:
-          setUsageLimitMsg(err.message);
-          setShowUsageLimit(true);
-          break;
-        case 503:
-          toastError(
-            "Service is temporarily at capacity. Please try again in a few minutes.",
-          );
-          break;
-        default:
-          toastError(err.message);
+  const promptSignIn = useCallback(
+    async (intent: {
+      kind: "run" | "sample";
+      files?: File[];
+      templateId?: string | null;
+      task?: string;
+    }) => {
+      try {
+        await savePendingRun(intent);
+      } catch {
+        /* best-effort; still open sign-in */
       }
-    } else {
-      toastError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again.",
-      );
+      openSignIn();
+    },
+    [openSignIn],
+  );
+
+  const handleApiError = useCallback(
+    async (
+      err: unknown,
+      intent?: {
+        kind: "run" | "sample";
+        files?: File[];
+        templateId?: string | null;
+        task?: string;
+      },
+    ) => {
+      if (err instanceof SignInRequiredError) {
+        if (intent) {
+          await promptSignIn(intent);
+        } else {
+          openSignIn();
+        }
+        return;
+      }
+      if (err instanceof ApiError) {
+        switch (err.status) {
+          case 401:
+            if (intent) {
+              await promptSignIn(intent);
+            } else {
+              openSignIn();
+            }
+            break;
+          case 429:
+            setUsageLimitMsg(err.message);
+            setShowUsageLimit(true);
+            break;
+          case 503:
+            toastError(
+              "Service is temporarily at capacity. Please try again in a few minutes.",
+            );
+            break;
+          default:
+            toastError(err.message);
+        }
+      } else {
+        toastError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong. Please try again.",
+        );
+      }
+    },
+    [openSignIn, promptSignIn],
+  );
+
+  const executeSample = useCallback(async () => {
+    setPhase("Loading sample…");
+    const response = await fetch("/samples/sample-invoice.pdf");
+    if (!response.ok) {
+      throw new Error("Sample invoice is missing.");
     }
-  }
+    const blob = await response.blob();
+    const file = new File([blob], "sample-invoice.pdf", {
+      type: "application/pdf",
+    });
+    setPhase("Uploading sample…");
+    const upload = await uploadFiles([file]);
+    setPhase("Starting pipeline…");
+    const run = await runTemplate(upload.upload_id, "invoice");
+    router.push(`/results/${run.run_id}`);
+  }, [router]);
+
+  const executeRun = useCallback(
+    async (runFiles: File[], runTask: string, templateId: string | null) => {
+      setPhase("Uploading documents…");
+      const upload = await uploadFiles(runFiles);
+      setPhase("Starting pipeline…");
+      const run = templateId
+        ? await runTemplate(upload.upload_id, templateId)
+        : await runAdhoc(upload.upload_id, runTask.trim());
+      router.push(`/results/${run.run_id}`);
+    },
+    [router],
+  );
 
   async function handleTrySample() {
+    const intent = { kind: "sample" as const };
     setLoading(true);
     try {
       await ensureUser();
-      setPhase("Loading sample…");
-      const response = await fetch("/samples/sample-invoice.pdf");
-      if (!response.ok) {
-        throw new Error("Sample invoice is missing.");
-      }
-      const blob = await response.blob();
-      const file = new File([blob], "sample-invoice.pdf", {
-        type: "application/pdf",
-      });
-      setPhase("Uploading sample…");
-      const upload = await uploadFiles([file]);
-      setPhase("Starting pipeline…");
-      const run = await runTemplate(upload.upload_id, "invoice");
-      router.push(`/results/${run.run_id}`);
+      await executeSample();
     } catch (err) {
-      handleApiError(err);
+      await handleApiError(err, intent);
     } finally {
       setLoading(false);
       setPhase(null);
@@ -129,23 +187,50 @@ export default function HomePage() {
       return;
     }
 
+    const intent = {
+      kind: "run" as const,
+      files,
+      templateId: selectedTemplateId,
+      task: task.trim(),
+    };
+
     setLoading(true);
     try {
       await ensureUser();
-      setPhase("Uploading documents…");
-      const upload = await uploadFiles(files);
-      setPhase("Starting pipeline…");
-      const run = selectedTemplateId
-        ? await runTemplate(upload.upload_id, selectedTemplateId)
-        : await runAdhoc(upload.upload_id, task.trim());
-      router.push(`/results/${run.run_id}`);
+      await executeRun(files, task, selectedTemplateId);
     } catch (err) {
-      handleApiError(err);
+      await handleApiError(err, intent);
     } finally {
       setLoading(false);
       setPhase(null);
     }
   }
+
+  useEffect(() => {
+    // Backup if a pending intent remains after a failed dialog resume.
+    if (!getAccessToken()) return;
+    if (resumeStarted.current) return;
+    resumeStarted.current = true;
+
+    void (async () => {
+      try {
+        setLoading(true);
+        setPhase("Starting your run…");
+        const runId = await resumePendingRun();
+        if (!runId) {
+          setLoading(false);
+          setPhase(null);
+          return;
+        }
+        router.push(`/results/${runId}`);
+      } catch (err) {
+        setLoading(false);
+        setPhase(null);
+        await handleApiError(err);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
 
   return (
     <div className="v2-page">
@@ -258,7 +343,7 @@ export default function HomePage() {
           </div>
 
           <p className="text-center text-xs text-muted-foreground pt-2">
-            No signup required · 5 docs free · Results in seconds
+            5 docs free · Results in seconds
           </p>
         </div>
       </main>

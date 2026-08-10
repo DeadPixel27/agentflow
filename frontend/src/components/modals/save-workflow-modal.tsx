@@ -8,6 +8,7 @@ import { ModalShell } from "@/components/modals/modal-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSignIn } from "@/hooks/use-sign-in";
 import { ApiError, saveWorkflowFromRun } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
@@ -30,6 +31,7 @@ export function SaveWorkflowModal({
   onSaved,
 }: SaveWorkflowModalProps) {
   const router = useRouter();
+  const { openSignIn } = useSignIn();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -50,7 +52,7 @@ export function SaveWorkflowModal({
       if (e instanceof SignInRequiredError) {
         toastError("Sign in to save workflows.");
         onClose();
-        router.push("/account");
+        openSignIn();
       } else {
         toastError(
           e instanceof ApiError ? e.message : "Failed to save workflow.",
