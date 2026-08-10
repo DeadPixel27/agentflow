@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, saveWorkflowFromRun } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { ensureUser, getStoredUserId } from "@/lib/user-session";
+import {
+  ensureUser,
+  getStoredUserId,
+  SignInRequiredError,
+} from "@/lib/user-session";
 
 interface SaveWorkflowModalProps {
   open: boolean;
@@ -43,9 +47,15 @@ export function SaveWorkflowModal({
       onClose();
       router.push("/workflows");
     } catch (e) {
-      toastError(
-        e instanceof ApiError ? e.message : "Failed to save workflow.",
-      );
+      if (e instanceof SignInRequiredError) {
+        toastError("Sign in to save workflows.");
+        onClose();
+        router.push("/account");
+      } else {
+        toastError(
+          e instanceof ApiError ? e.message : "Failed to save workflow.",
+        );
+      }
     } finally {
       setLoading(false);
     }

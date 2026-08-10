@@ -3,8 +3,9 @@
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,12 @@ import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError, getUserUsage, type UsageSummary } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { clearStoredUser, signInUser } from "@/lib/user-session";
+import {
+  clearStoredUser,
+  isEmailAuthAllowed,
+  signInUser,
+  signInWithGoogle,
+} from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
 function AccountCard({
@@ -80,6 +86,7 @@ export default function AccountPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const allowEmailAuth = isEmailAuthAllowed();
 
   useEffect(() => {
     if (user) {
@@ -97,6 +104,18 @@ export default function AccountPage() {
     toastSuccess("Signed out.");
   }
 
+  const finishSignIn = useCallback(
+    (signedIn: { name: string }, isNewUser: boolean) => {
+      toastSuccess(
+        isNewUser
+          ? `Welcome, ${signedIn.name}!`
+          : `Welcome back, ${signedIn.name}!`,
+      );
+      router.push("/workflows");
+    },
+    [router],
+  );
+
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
@@ -111,18 +130,31 @@ export default function AccountPage() {
     try {
       const { user: signedIn, isNewUser } = await signInUser(name, email);
       setUser(signedIn);
-      toastSuccess(
-        isNewUser
-          ? `Welcome, ${signedIn.name}!`
-          : `Welcome back, ${signedIn.name}!`,
-      );
-      router.push("/workflows");
+      finishSignIn(signedIn, isNewUser);
     } catch (err) {
       toastError(err instanceof ApiError ? err.message : "Failed to sign in.");
     } finally {
       setLoading(false);
     }
   }
+
+  const handleGoogleCredential = useCallback(
+    async (idToken: string) => {
+      setLoading(true);
+      try {
+        const { user: signedIn, isNewUser } = await signInWithGoogle(idToken);
+        setUser(signedIn);
+        finishSignIn(signedIn, isNewUser);
+      } catch (err) {
+        toastError(
+          err instanceof ApiError ? err.message : "Google sign-in failed.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [finishSignIn, setUser],
+  );
 
   if (!ready) {
     return (
@@ -137,34 +169,56 @@ export default function AccountPage() {
       <div className="v2-page">
         <PageHeader title="Account" description="Sign in to save workflows" />
         <main className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto max-w-[480px]">
+          <div className="mx-auto max-w-[480px] space-y-4">
             <AccountCard title="Sign in">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sign in / Create account
-                </Button>
-              </form>
+              <div className="space-y-4">
+                <GoogleSignInButton
+                  onCredential={handleGoogleCredential}
+                  disabled={loading}
+                />
+                {allowEmailAuth && (
+                  <>
+                    <div className="relative py-1">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-2 text-muted-foreground">
+                          or email
+                        </span>
+                      </div>
+                    </div>
+                    <form onSubmit={handleSignIn} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name</Label>
+                        <Input
+                          id="name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          disabled={loading}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Sign in / Create account
+                      </Button>
+                    </form>
+                  </>
+                )}
+              </div>
             </AccountCard>
           </div>
         </main>
