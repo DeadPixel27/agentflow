@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useSignIn } from "@/hooks/use-sign-in";
 import { useUser } from "@/hooks/use-user";
+import { toastSuccess } from "@/lib/toast";
 import { clearStoredUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function NavBar() {
     clearStoredUser();
     setUser(null);
     setOpen(false);
+    toastSuccess("Signed out.");
     router.push("/");
   }
 
