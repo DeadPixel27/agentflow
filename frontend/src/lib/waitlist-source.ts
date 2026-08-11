@@ -2,6 +2,9 @@
 export const WAITLIST_SOURCES = {
   normal: "normal",
   pagesExhausted: "pages_exhausted",
+  emailsExhausted: "emails_exhausted",
+  sheetsExhausted: "sheets_exhausted",
+  refinesExhausted: "refines_exhausted",
   inboundEmail: "inbound_email",
 } as const;
 
@@ -23,4 +26,17 @@ export function normalizeWaitlistSource(
 export function pricingHref(source: WaitlistSource = WAITLIST_SOURCES.normal): string {
   if (source === WAITLIST_SOURCES.normal) return "/pricing";
   return `/pricing?source=${encodeURIComponent(source)}`;
+}
+
+/** Pick waitlist attribution from a backend 429 detail message. */
+export function waitlistSourceFromLimitMessage(
+  message: string | undefined,
+): WaitlistSource {
+  const text = (message || "").toLowerCase();
+  if (text.includes("email")) return WAITLIST_SOURCES.emailsExhausted;
+  if (text.includes("sheets")) return WAITLIST_SOURCES.sheetsExhausted;
+  if (text.includes("refinement") || text.includes("refine")) {
+    return WAITLIST_SOURCES.refinesExhausted;
+  }
+  return WAITLIST_SOURCES.pagesExhausted;
 }

@@ -22,6 +22,9 @@ ALLOWED_WAITLIST_SOURCES = frozenset(
     {
         "normal",
         "pages_exhausted",
+        "emails_exhausted",
+        "sheets_exhausted",
+        "refines_exhausted",
         "inbound_email",
         "pricing_page",  # legacy → normalized to normal
     }

@@ -190,7 +190,6 @@ export function RefineChatPanel({
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        toastError(e.message);
         onUsageLimit?.(e.message);
       } else if (e instanceof ApiError && e.status === 503) {
         toastError("Service is temporarily at capacity. Try again shortly.");
@@ -235,7 +234,6 @@ export function RefineChatPanel({
       onRefined(result.run.run_id, result.refine_summary);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        toastError(e.message);
         onUsageLimit?.(e.message);
       } else if (e instanceof ApiError && e.status === 503) {
         toastError("Service is temporarily at capacity. Try again shortly.");

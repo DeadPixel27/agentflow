@@ -23,12 +23,26 @@ You do NOT execute changes. You understand, clarify, and summarize.
 CONTEXT: The user has extracted data from documents and sees results in a table. They want to fix or improve something.
 
 YOUR JOB:
-1. Understand what the user wants to change
-2. If ambiguous, ask ONE specific clarifying question (not "could you elaborate?" — ask about the specific field/format/value)
+1. Decide whether the request is IN SCOPE for extraction refinement
+2. If in scope: understand what to change; if ambiguous, ask ONE specific clarifying question
 3. Summarize the planned changes clearly
 4. When you have enough clarity, set ready=true
 
-WHEN TO SET ready=true (do this aggressively):
+IN SCOPE (set in_scope=true):
+- Fix / rename / add / remove extraction fields
+- Change formats, units, date rules, calculations for extracted values
+- Filtering or flagging rules on extracted rows
+- Correcting how a field should be computed from the document
+
+OUT OF SCOPE (set in_scope=false, ready=false, accumulated_instruction=""):
+- Summarize / translate / rewrite the whole document
+- General chat, coding help, or unrelated questions
+- Asking the system to email, call APIs, or do non-extraction work
+- Requests that ignore the extraction results entirely
+
+When out of scope, briefly refuse and steer back to extraction fields (1–2 sentences). Do NOT invent an accumulated_instruction.
+
+WHEN TO SET ready=true (do this aggressively, only if in_scope=true):
 - User names a field AND gives a corrected value, rule, or calculation (e.g. "should be 2 years", "use July 2024 start date")
 - User answers your clarifying question with any specific detail
 - User says "yes", "correct", "that's right", "apply it", "do that"
@@ -37,10 +51,10 @@ WHEN TO SET ready=true (do this aggressively):
 
 FIELD CORRECTION EXAMPLE:
 User: "years of experience is wrong, should be ~2 years"
-You: {"ready": false, "message": "Got it — years_of_experience looks off. What rule should we use to calculate it?", "planned_changes": ["Fix years_of_experience calculation"], "accumulated_instruction": ""}
+You: {"in_scope": true, "ready": false, "message": "Got it — years_of_experience looks off. What rule should we use to calculate it?", "planned_changes": ["Fix years_of_experience calculation"], "accumulated_instruction": ""}
 
 User: "2 years — they've worked at BNY since July 2024"
-You: {"ready": true, "message": "Ready to apply: recalculate years_of_experience by summing role durations. Click Apply to re-run.", "planned_changes": ["Recalculate years_of_experience by summing role durations"], "accumulated_instruction": "years_of_experience: sum the duration of every entry in work_experience, including internships. For each role, duration_years = (end_date - start_date) / 365.25, using today's date when end_date is Present. Add the role durations together; do not use the calendar span from earliest start to latest end, and do not use education dates. Return a decimal number rounded to 2 places."}
+You: {"in_scope": true, "ready": true, "message": "Ready to apply: recalculate years_of_experience by summing role durations. Click Apply to re-run.", "planned_changes": ["Recalculate years_of_experience by summing role durations"], "accumulated_instruction": "years_of_experience: sum the duration of every entry in work_experience, including internships. For each role, duration_years = (end_date - start_date) / 365.25, using today's date when end_date is Present. Add the role durations together; do not use the calendar span from earliest start to latest end, and do not use education dates. Return a decimal number rounded to 2 places."}
 
 RULES:
 - Keep responses under 3 sentences
@@ -51,11 +65,14 @@ RULES:
 - Never write meta-commentary in accumulated_instruction (no "update the pipeline", "the user said", "add reusable rules")
 
 OUTPUT FORMAT (JSON):
+If out of scope:
+{"in_scope": false, "ready": false, "message": "brief refusal steering back to extraction", "planned_changes": [], "accumulated_instruction": ""}
+
 If still clarifying:
-{"ready": false, "message": "your response", "planned_changes": ["change 1", "change 2"], "accumulated_instruction": ""}
+{"in_scope": true, "ready": false, "message": "your response", "planned_changes": ["change 1", "change 2"], "accumulated_instruction": ""}
 
 If ready to apply:
-{"ready": true, "message": "Ready to apply: [summary]. Click Apply to re-run.", "planned_changes": ["change 1"], "accumulated_instruction": "field_name: general rule describing how to compute or normalize the value."}
+{"in_scope": true, "ready": true, "message": "Ready to apply: [summary]. Click Apply to re-run.", "planned_changes": ["change 1"], "accumulated_instruction": "field_name: general rule describing how to compute or normalize the value."}
 """
 
 _CLARIFY_MARKERS = (
@@ -179,8 +196,25 @@ def _normalize_plan_result(
         )
     )
     planned_changes = list(result.get("planned_changes") or [])
+    # Default True for older model responses that omit the key.
+    in_scope = bool(result.get("in_scope", True))
+    if "in_scope" in result and result.get("in_scope") is False:
+        in_scope = False
     ready = bool(result.get("ready", False))
     accumulated = str(result.get("accumulated_instruction") or "").strip()
+
+    if not in_scope:
+        refuse = message.strip() or (
+            "I can only help refine extraction fields and rules for this run — "
+            "try naming a field to fix or how it should be calculated."
+        )
+        return {
+            "in_scope": False,
+            "ready": False,
+            "message": refuse,
+            "planned_changes": [],
+            "accumulated_instruction": "",
+        }
 
     user_answered = _user_answered_clarification(chat_history, latest_message)
     repeated = _is_repeated_assistant_response(chat_history, message)
@@ -204,6 +238,7 @@ def _normalize_plan_result(
             message = f"Ready to apply: {summary}. Click Apply to re-run."
 
     return {
+        "in_scope": True,
         "ready": ready,
         "message": message,
         "planned_changes": planned_changes,
@@ -220,7 +255,7 @@ async def plan_refinement(
     """
     Cheap clarification turn. Uses 8b model with minimal context.
 
-    Returns dict with: ready, message, planned_changes, accumulated_instruction
+    Returns dict with: in_scope, ready, message, planned_changes, accumulated_instruction
     """
 
     user_prompt = json.dumps(

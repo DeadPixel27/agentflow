@@ -201,6 +201,11 @@ async def refine_plan(
 
     await require_run_access(run, current_user, repo)
 
+    try:
+        await check_refine_allowed(run_id, repo=repo)
+    except RefineLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
+
     run = versions.hydrate_run(run)
 
     logger.info(
@@ -228,8 +233,9 @@ async def refine_plan(
         raise HTTPException(status_code=502, detail=f"Plan mode failed: {e}") from e
 
     logger.info(
-        "[refine] plan result run_id=%s ready=%s planned_changes=%s instruction_len=%d",
+        "[refine] plan result run_id=%s in_scope=%s ready=%s planned_changes=%s instruction_len=%d",
         run_id,
+        result.get("in_scope", True),
         result["ready"],
         result.get("planned_changes"),
         len(str(result.get("accumulated_instruction") or "")),
@@ -237,8 +243,13 @@ async def refine_plan(
 
     # Plan chat (Groq) is cheap and unmetered. Preview re-extracts with GPT-4o —
     # reserve pages before preview (fail-closed); refund if preview crashes.
+    # Never preview when out of scope or not ready.
     preview: list = []
-    if result["ready"] and result.get("accumulated_instruction"):
+    if (
+        result.get("in_scope", True)
+        and result["ready"]
+        and result.get("accumulated_instruction")
+    ):
         page_count = await enforce_upload_usage(
             current_user.user_id, run.upload_id
         )
@@ -292,6 +303,7 @@ async def refine_plan(
         planned_changes=result["planned_changes"],
         accumulated_instruction=result["accumulated_instruction"],
         preview=preview,
+        in_scope=bool(result.get("in_scope", True)),
     )
 
 
@@ -329,29 +341,49 @@ async def refine_run(
     except RefineLimitError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
 
-    # Apply re-runs extraction (GPT-4o) on the upload — meter pages like a new run.
-    # check_refine_allowed only caps chat iterations; this caps LLM spend.
+    # Reserve pages before Groq refiner / GPT-4o re-run (fail-closed).
     page_count = await enforce_upload_usage(current_user.user_id, parent.upload_id)
+    await charge_run_pages(
+        current_user.user_id,
+        page_count=page_count,
+        run_id=run_id,
+        template_id=parent.template_id,
+        event_type="refine",
+    )
+
+    async def _refund_refine_charge() -> None:
+        try:
+            from app.services.usage.metering import record_usage
+
+            await record_usage(
+                current_user.user_id,
+                -page_count,
+                run_id=run_id,
+                event_type="refund:refine",
+            )
+        except Exception:
+            logger.warning(
+                "Failed to refund refine usage parent_run_id=%s",
+                run_id,
+                exc_info=True,
+            )
 
     try:
         run, summary = await refine_service.refine_and_start(run_id, body.message)
     except RunNotFoundError as e:
+        await _refund_refine_charge()
         raise HTTPException(status_code=404, detail=str(e))
     except RunNotRefinableError as e:
+        await _refund_refine_charge()
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
+        await _refund_refine_charge()
         raise HTTPException(status_code=400, detail=str(e))
     except RefinerError as e:
+        await _refund_refine_charge()
         raise HTTPException(status_code=502, detail=str(e))
 
     # Targeted single-field refine returns a completed run — skip re-execution
-    await charge_run_pages_or_abandon(
-        current_user.user_id,
-        run,
-        page_count=page_count,
-        template_id=run.template_id or parent.template_id,
-        event_type="refine",
-    )
     if run.status == "running":
         _schedule_run(background_tasks, run.run_id)
     logger.info(

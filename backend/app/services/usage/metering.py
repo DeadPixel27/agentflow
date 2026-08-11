@@ -463,10 +463,16 @@ async def get_usage_summary(user_id: str) -> dict:
         next_month = month_start.replace(month=now.month + 1)
 
     pages_used = await get_user_usage_this_month(user_id)
+    emails_used = await get_user_outbound_usage_this_month(user_id, EMAIL_EVENT_TYPE)
+    sheets_used = await get_user_outbound_usage_this_month(user_id, SHEETS_EVENT_TYPE)
 
     return {
         "pages_used": pages_used,
         "pages_limit": settings.free_page_limit_monthly,
+        "emails_used": emails_used,
+        "emails_limit": settings.free_email_limit_monthly,
+        "sheets_used": sheets_used,
+        "sheets_limit": settings.free_sheets_limit_monthly,
         "resets_at": next_month.isoformat(),
     }
 
