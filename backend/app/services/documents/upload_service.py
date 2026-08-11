@@ -14,6 +14,10 @@ from app.models.domain.document import InvalidUploadError
 from app.models.domain.upload import UploadRecord
 from app.persistence.protocols import DataRepository, DocumentStorageRepository
 from app.services.documents.text_extractor import ExtractionResult, extract_text
+from app.services.usage.page_count import (
+    assert_within_page_limit,
+    count_pages_from_bytes,
+)
 
 logger = logging.getLogger("upload")
 
@@ -37,6 +41,7 @@ class UploadService:
     ) -> UploadResponse:
         """Process a batch of uploaded files end-to-end and bind to owner."""
         self._validate_batch(files)
+        await self._validate_page_limits(files)
 
         upload_id = str(uuid.uuid4())
         logger.info(
@@ -80,6 +85,15 @@ class UploadService:
                 f"Total upload size exceeds "
                 f"{settings.max_upload_size_mb * MAX_FILES_PER_UPLOAD} MB"
             )
+
+    async def _validate_page_limits(self, files: list[UploadFile]) -> None:
+        """Reject any file over max_pages_per_file before storage/OCR spend."""
+        for file in files:
+            data = await file.read()
+            await file.seek(0)
+            name = file.filename or "document"
+            pages = count_pages_from_bytes(name, data)
+            assert_within_page_limit(name, pages)
 
     async def _process_single_file(self, file: UploadFile, upload_id: str) -> UploadedDocument:
         """Save one file and extract its text."""

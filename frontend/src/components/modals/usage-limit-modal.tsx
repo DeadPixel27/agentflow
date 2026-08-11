@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ModalShell } from "@/components/modals/modal-shell";
 import { Button } from "@/components/ui/button";
+import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 interface UsageLimitModalProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function UsageLimitModal({
           <Button
             onClick={() => {
               onClose();
-              router.push("/pricing");
+              router.push(pricingHref(WAITLIST_SOURCES.pagesExhausted));
             }}
           >
             Join Pro Waitlist

@@ -19,6 +19,13 @@ from tenacity import (
 )
 
 from app.config import settings
+from app.services.llm.openai_cost import (
+    OpenAIBudgetError,
+    check_openai_budget_allowed,
+    estimate_from_response,
+    log_openai_usage_event,
+    record_openai_usage,
+)
 
 logger = logging.getLogger("llm")
 
@@ -111,6 +118,8 @@ async def complete_json(
     If return_logprobs=True, returns LLMResult with both parsed JSON and
     token logprobs (for confidence scoring). Otherwise returns dict.
     """
+    check_openai_budget_allowed()
+
     client = _get_client()
     primary = model or settings.openai_model
     candidates = [primary]
@@ -134,6 +143,14 @@ async def complete_json(
                 user_prompt=user_prompt,
                 json_schema=json_schema,
             )
+            estimate = estimate_from_response(model_name, response)
+            if estimate is not None:
+                record_openai_usage(estimate)
+                try:
+                    await log_openai_usage_event(estimate)
+                except Exception:
+                    logger.debug("OpenAI usage analytics log failed", exc_info=True)
+
             raw = response.choices[0].message.content or "{}"
             try:
                 parsed = json.loads(raw)
@@ -151,6 +168,8 @@ async def complete_json(
                     model_name,
                     raw[:500],
                 )
+        except OpenAIBudgetError:
+            raise
         except BaseException as exc:
             last_exc = exc
 

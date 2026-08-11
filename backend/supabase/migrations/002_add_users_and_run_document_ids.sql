@@ -1,4 +1,4 @@
--- Migration for existing AgentFlow databases
+-- Migration for existing Nexora databases
 
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),

@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 interface DetailSidebarProps {
   workflow: WorkflowResponse;
@@ -74,7 +75,7 @@ export function DetailSidebar({
         <div className="rounded-md px-3 py-2 text-xs bg-blue-50 text-blue-800">
           {workflow.default_sheets_url?.trim()
             ? "Push to Sheets — configured"
-            : "Push to Sheets — configure in settings"}
+            : "Push to Sheets — share sheet + URL in settings"}
         </div>
       </section>
 
@@ -84,9 +85,14 @@ export function DetailSidebar({
           <span>UI Upload</span>
           <span className="v2-badge-success">active</span>
         </div>
-        <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs opacity-60">
+        <div className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
           <span>Inbound Email</span>
-          <span className="v2-badge-muted">coming soon</span>
+          <Link
+            href={pricingHref(WAITLIST_SOURCES.inboundEmail)}
+            className="v2-badge-muted hover:underline"
+          >
+            Pro · join waitlist
+          </Link>
         </div>
       </section>
 

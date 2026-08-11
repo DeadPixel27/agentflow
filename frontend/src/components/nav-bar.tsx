@@ -55,10 +55,13 @@ export function NavBar() {
       <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-md bg-foreground text-[11px] font-bold text-background">
-              A
+            <span
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground"
+              aria-hidden
+            >
+              N
             </span>
-            <span className="text-sm font-semibold tracking-tight">AgentFlow</span>
+            <span className="text-sm font-semibold tracking-tight">Nexora</span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
             {NAV_LINKS.map((item) => {
@@ -110,16 +113,13 @@ export function NavBar() {
                   >
                     Account Settings
                   </Link>
-                  <button
-                    type="button"
+                  <Link
+                    href="/account#integrations"
                     className="block w-full px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    onClick={() => {
-                      setOpen(false);
-                      router.push("/account");
-                    }}
+                    onClick={() => setOpen(false)}
                   >
                     Integrations
-                  </button>
+                  </Link>
                   <div className="my-1 border-t border-border" />
                   <button
                     type="button"

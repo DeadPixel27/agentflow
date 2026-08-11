@@ -1,5 +1,5 @@
 """
-AgentFlow API — main entry point.
+Nexora API — main entry point.
 
 WHAT IS FASTAPI?
   A Python web framework. You define functions, decorate them with @router.get/post,
@@ -33,6 +33,7 @@ from app.api.routes import (
     health,
     inbound,
     inbound_addresses,
+    integrations,
     pipeline,
     runs,
     sheets,
@@ -74,7 +75,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title="AgentFlow API",
+    title="Nexora API",
     description="Upload documents, describe a task, AI builds and runs a pipeline.",
     version="0.1.0",
     lifespan=lifespan,
@@ -94,6 +95,7 @@ app.add_middleware(
 
 # Register routes — each router file owns a group of endpoints
 app.include_router(health.router)
+app.include_router(integrations.router)
 app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(waitlist.router)

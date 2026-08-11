@@ -11,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
-import { ApiError, getUserUsage, type UsageSummary } from "@/lib/api";
+import { ApiError, getIntegrationsStatus, getUserUsage, updateMyProfile, type IntegrationsStatus, type UsageSummary } from "@/lib/api";
 import { hasPendingRun } from "@/lib/pending-run";
 import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
+  applyStoredUserUpdate,
   clearStoredUser,
   isEmailAuthAllowed,
   signInUser,
@@ -29,17 +30,20 @@ function AccountCard({
   highlight,
   danger,
   dimmed,
+  id,
 }: {
   title: string;
   children: React.ReactNode;
   highlight?: boolean;
   danger?: boolean;
   dimmed?: boolean;
+  id?: string;
 }) {
   return (
     <div
+      id={id}
       className={cn(
-        "rounded-lg border bg-card p-5 space-y-4",
+        "rounded-lg border bg-card p-5 space-y-4 scroll-mt-6",
         highlight && "border-primary/30 bg-primary/5",
         danger && "border-destructive/40",
         dimmed && "opacity-65",
@@ -86,24 +90,75 @@ export default function AccountPage() {
   const { user, ready, setUser } = useUser();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [loading, setLoading] = useState(false);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [integrations, setIntegrations] = useState<IntegrationsStatus | null>(null);
   const allowEmailAuth = isEmailAuthAllowed();
 
   useEffect(() => {
     if (user) {
-      getUserUsage()
-        .then(setUsage)
-        .catch(() => {
-          /* silent fail - show defaults */
-        });
+      setDisplayName(user.name);
     }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+
+    function scrollToHash() {
+      const hash = window.location.hash.replace(/^#/, "");
+      if (!hash) return;
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // Client navigations don't always scroll to hash; do it after paint.
+    requestAnimationFrame(scrollToHash);
+    window.addEventListener("hashchange", scrollToHash);
+    return () => window.removeEventListener("hashchange", scrollToHash);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    getUserUsage()
+      .then(setUsage)
+      .catch(() => {
+        /* silent fail - show defaults */
+      });
+    getIntegrationsStatus()
+      .then(setIntegrations)
+      .catch(() => {
+        /* silent fail - show unknown */
+      });
   }, [user]);
 
   function handleSignOut() {
     clearStoredUser();
     setUser(null);
     toastSuccess("Signed out.");
+  }
+
+  async function handleSaveName() {
+    const next = displayName.trim();
+    if (!next) {
+      toastError("Name is required.");
+      return;
+    }
+    if (user && next === user.name) {
+      return;
+    }
+    setSavingName(true);
+    try {
+      const updated = await updateMyProfile(next);
+      const stored = applyStoredUserUpdate({ name: updated.name });
+      if (stored) setUser(stored);
+      setDisplayName(updated.name);
+      toastSuccess("Name updated.");
+    } catch (err) {
+      toastError(err instanceof ApiError ? err.message : "Failed to update name.");
+    } finally {
+      setSavingName(false);
+    }
   }
 
   const finishSignIn = useCallback(
@@ -290,7 +345,7 @@ export default function AccountPage() {
             {usage && usage.pages_used >= usage.pages_limit && (
               <p className="text-xs text-amber-600 font-medium">
                 You&apos;ve hit your free limit.{" "}
-                <Link href="/pricing" className="underline">
+                <Link href="/pricing?source=pages_exhausted" className="underline">
                   Join the Pro waitlist
                 </Link>{" "}
                 for unlimited access.
@@ -300,58 +355,110 @@ export default function AccountPage() {
 
           <AccountCard title="Profile">
             <div className="flex items-center gap-4">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
-                {initials(user.name)}
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
+                {initials(displayName || user.name)}
               </span>
-              <div className="text-sm space-y-0.5">
-                <p className="font-semibold">{user.name}</p>
-                <p className="text-muted-foreground">{user.email || "—"}</p>
+              <div className="text-sm space-y-0.5 min-w-0">
+                <p className="font-semibold truncate">{user.name}</p>
+                <p className="text-muted-foreground truncate">
+                  {user.email || "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Signed in with Google · email can’t be changed here
+                </p>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Name</Label>
-                <Input value={user.name} readOnly />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Email</Label>
-                <Input value={user.email} readOnly />
+            <div className="space-y-1.5">
+              <Label htmlFor="display-name" className="text-xs text-muted-foreground">
+                Display name
+              </Label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="display-name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={120}
+                  disabled={savingName}
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveName}
+                  disabled={
+                    savingName ||
+                    !displayName.trim() ||
+                    displayName.trim() === user.name
+                  }
+                  className="sm:shrink-0"
+                >
+                  {savingName ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Saving
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled>
-                Edit Profile
-              </Button>
-              <Button variant="outline" size="sm" disabled>
-                Change Password
-              </Button>
+            <div>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 Sign out
               </Button>
             </div>
           </AccountCard>
 
-          <AccountCard title="Integrations">
+          <AccountCard id="integrations" title="Integrations">
+            <p className="text-xs text-muted-foreground">
+              Managed by Nexora. Push results from a run when available — nothing
+              to configure here.
+            </p>
             <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-                <span>Email (Resend)</span>
-                <div className="flex items-center gap-2">
-                  <span className="v2-badge-success">Connected</span>
-                  <Button variant="outline" size="sm" disabled>
-                    Configure
-                  </Button>
+              <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p>Email delivery</p>
+                  <p className="text-xs text-muted-foreground">
+                    Send extraction results to your inbox
+                  </p>
                 </div>
+                <span
+                  className={
+                    integrations?.email_configured
+                      ? "v2-badge-success"
+                      : "v2-badge-muted"
+                  }
+                >
+                  {integrations == null
+                    ? "…"
+                    : integrations.email_configured
+                      ? "Available"
+                      : "Unavailable"}
+                </span>
               </div>
-              <div className="flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-                <span>Google Sheets</span>
-                <div className="flex items-center gap-2">
-                  <span className="v2-badge-success">Connected</span>
-                  <Button variant="outline" size="sm" disabled>
-                    Configure
-                  </Button>
+              <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p>Google Sheets</p>
+                  <p className="text-xs text-muted-foreground">
+                    {integrations?.sheets_share_email
+                      ? `Share sheets with ${integrations.sheets_share_email}`
+                      : "Append rows to a spreadsheet you share"}
+                  </p>
                 </div>
+                <span
+                  className={
+                    integrations?.sheets_configured
+                      ? "v2-badge-success"
+                      : "v2-badge-muted"
+                  }
+                >
+                  {integrations == null
+                    ? "…"
+                    : integrations.sheets_configured
+                      ? "Available"
+                      : "Unavailable"}
+                </span>
               </div>
-              <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2.5 text-sm opacity-70">
+              <div className="flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2.5 text-sm opacity-70">
                 <span>Webhook</span>
                 <span className="v2-badge-muted">Coming soon</span>
               </div>

@@ -53,6 +53,6 @@ async def test_sheets_agent_requires_rows():
 def test_a1_range_quotes_sheet_names_with_spaces():
     from app.services.sheets.sheets_service import _a1_range
 
-    assert _a1_range("AgentFlow Results") == "'AgentFlow Results'!A1"
+    assert _a1_range("Nexora Results") == "'Nexora Results'!A1"
     assert _a1_range("Results") == "Results!A1"
     assert _a1_range("O'Brien") == "'O''Brien'!A1"

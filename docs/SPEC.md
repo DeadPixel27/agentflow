@@ -1,10 +1,11 @@
-# AgentFlow - Project Spec
+# Nexora - Project Spec
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot (2026-08-08):** MVP through **V1.3** + **Frontend V2** + **Backend V2** shipped on `develop` (`c164ccf`, `dfef3a7`). Full-stack API parity: email/Sheets export, workflow PATCH/settings, inbound addresses, workflow-only versioning. Frontend `api.ts` aligned with backend (no dead run-version client calls). **66 backend tests** · E2E smoke **32 passed**. See [ARCHITECTURE.md](../ARCHITECTURE.md), [FRONTEND-V2-PLAN.md](./FRONTEND-V2-PLAN.md), [BACKEND-V2-PLAN.md](./BACKEND-V2-PLAN.md).
+> **Progress snapshot:** Launch stack (V2/V3 + auth/metering) shipped on `develop`. Open work: [NEXT-STEPS.md](./NEXT-STEPS.md). System truth: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-**Documentation:** All markdown lives in repo root, `docs/`, and `backend/` — see [README.md](./README.md). Screenshot JPEGs under `docs/_archive/source-screenshots/` are gitignored.
+
+**Documentation:** All reference docs live in [`docs/`](./README.md).
 
 ---
 
@@ -102,13 +103,13 @@ Step 4: Formatter (output: CSV with flag column)
 | **Auth** | Email lookup (no password) | MVP session; future: Supabase Auth | ✅ Done |
 | **Deploy (frontend)** | Vercel | Free for personal projects | ❌ Not started |
 | **Deploy (backend)** | Railway | $5 free credit/month | ❌ Not started |
-| **Pre-deploy hardening** | CORS, rate limits, MIME, Dockerfile, etc. | See local `docs/GAPS-TECHNICAL.md` | ✅ Done |
+| **Pre-deploy hardening** | CORS, rate limits, MIME, Dockerfile, etc. | Done | ✅ Done |
 | **Templates** | Code-defined presets + Supabase mirror | `backend/app/templates/` | ✅ Done |
 | **User template versions** | Supabase Storage `user-templates` + Postgres index | Workflow versions; refine does not create versions | ✅ Done |
 | **Email delivery** | Resend API | `output.email` agent + `POST /api/runs/{id}/email` | ✅ Done |
 | **Google Sheets** | Service account JSON | `output.google_sheets` agent + `POST /api/runs/{id}/sheets` | ✅ Done |
-| **Inbound email** | Mailgun webhook | Forward to `*@ingest.agentflow.app` → auto-run workflow | ✅ Done |
-| **Code** | GitHub (public repo) | Recruiters will see this | ✅ [kabirrao2002/agentflow](https://github.com/kabirrao2002/agentflow) |
+| **Inbound email** | Mailgun webhook | Forward to `*@ingest.nexora.app` → auto-run workflow | ✅ Done |
+| **Code** | GitHub (public repo) | Recruiters will see this | ✅ [DeadPixel27/agentflow](https://github.com/DeadPixel27/agentflow) |
 
 ---
 
@@ -138,7 +139,7 @@ Full diagrams (system context, three-layer templates, pipeline flow, persistence
 └───────────────────────────────────────────────────────────┘
 ```
 
-See also: [ARCHITECTURE.md](./ARCHITECTURE.md), `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
+See also: [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
@@ -288,7 +289,7 @@ See [docs/ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) for coding rul
 | `pipeline_templates` | Editable task presets (landing page; not user workflows) |
 | `user_template_versions` | Metadata index for **workflow** template versions |
 | `refinement_events` | User refine messages (owner aggregation) |
-| `inbound_addresses` | Unique `flow-*@ingest.agentflow.app` → workflow mapping |
+| `inbound_addresses` | Unique `flow-*@ingest.nexora.app` → workflow mapping |
 
 Document files are stored in **Supabase Storage** (`Documents` bucket), not in Postgres.
 
@@ -315,7 +316,7 @@ RESEND_FROM_EMAIL=onboarding@resend.dev
 GOOGLE_SERVICE_ACCOUNT_JSON=
 
 # V2 inbound email (optional)
-INBOUND_EMAIL_DOMAIN=ingest.agentflow.app
+INBOUND_EMAIL_DOMAIN=ingest.nexora.app
 INBOUND_WEBHOOK_SECRET=
 ```
 
@@ -353,7 +354,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] Workflows list + detail + rerun + expandable run history
 - [x] Account page with email sign-in
 - [x] Mobile nav, toasts, empty states
-- [x] `frontend/FRONTEND.md` directory guide
+- [x] Frontend directory guide (see ARCHITECTURE §11)
 - [x] E2E tested locally
 - [x] PR #2 merged to `develop`
 
@@ -385,8 +386,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 ### V2: Frontend + Backend redesign ✅ (merged to `develop`, 2026-08-08)
 
-- [x] Frontend V2 UI — compact home, 3-col results, export modals, workflow settings ([FRONTEND-V2-PLAN](./FRONTEND-V2-PLAN.md))
-- [x] Backend V2 — email, Sheets, inbound, workflow PATCH/settings ([BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md))
+- [x] Frontend V2 UI — compact home, 3-col results, export modals, workflow settings ([ARCHITECTURE.md](./ARCHITECTURE.md))
+- [x] Backend V2 — email, Sheets, inbound, workflow PATCH/settings ([ARCHITECTURE.md](./ARCHITECTURE.md))
 - [x] Versioning simplification — workflow-only versions; refine creates child runs only
 - [x] `output.email` + `output.google_sheets` agents
 - [x] Migrations `008_inbound_addresses`, `009_workflow_delivery_defaults`; `schema.sql` synced
@@ -398,14 +399,16 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 ### V2 polish (optional, pre-deploy)
 
 - [ ] Inbound webhook: email results back to sender when run completes
-- [ ] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder)
+- [x] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder) — **superseded for launch:** inbound gated behind Pro waitlist (`/pricing?source=inbound_email`); backend CRUD kept
+- [x] Sheets/email setup walkthrough in Workflow Settings + Sheets modal (`GET /api/integrations` exposes share-as-Editor email)
+- [x] Waitlist `source` telemetry: `normal` | `pages_exhausted` | `inbound_email`
 - [ ] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing
 
 ---
 
 ## Master Tracker
 
-> **Single source of truth for open work.** Extended notes: [docs/GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md), [docs/PLAN-AND-NEXT-STEPS.md](./PLAN-AND-NEXT-STEPS.md), [docs/FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md).
+> **Single source of truth for open work:** [NEXT-STEPS.md](./NEXT-STEPS.md).
 
 ### Gap priority (from code review)
 
@@ -432,55 +435,55 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | V1.1 | Email delivery (Resend) | Medium | ✅ Done — `output.email`, `POST /api/runs/{id}/email` |
 | V1.2 | Google Sheets push | Medium | ✅ Done — `output.google_sheets`, `POST /api/runs/{id}/sheets` |
 | V1.3 | Chat refinement + versioned user templates | High | ✅ Done — workflow versions only in V2 |
-| V2.0 | Frontend V2 redesign + export/settings UX | High | ✅ Done — [FRONTEND-V2-PLAN](./FRONTEND-V2-PLAN.md) |
-| V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
-| V2.1 | Live PDF preview + field highlights | 6–10 hr | `docs/FEATURE-ROADMAP.md` |
-| V2.1 | Auto-correct / learning from edits | Medium | `docs/FEATURE-ROADMAP.md` |
+| V2.0 | Frontend V2 redesign + export/settings UX | High | ✅ Done — [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| V2.1 | Live PDF preview + field highlights | 6–10 hr | `docs/NEXT-STEPS.md` |
+| V2.1 | Auto-correct / learning from edits | Medium | `docs/NEXT-STEPS.md` |
 | V3.0 | Inbound reply-to-sender after run completes | Medium | partial — webhook runs workflow; no auto-reply yet |
-| V3.0 | Watch folder / inbox automation | 12–20 hr | `docs/FEATURE-ROADMAP.md` |
+| V3.0 | Watch folder / inbox automation | 12–20 hr | `docs/NEXT-STEPS.md` |
 
 ### Phase A — Deploy (P0)
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [x] | CORS from env var | [GAPS #3](./GAPS-TECHNICAL.md) |
-| [x] | Backend Dockerfile | [GAPS #9](./GAPS-TECHNICAL.md) |
-| [ ] | Deploy backend (Railway) + env vars | `docs/PLAN-AND-NEXT-STEPS.md` |
-| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | `docs/PLAN-AND-NEXT-STEPS.md` |
-| [ ] | Live smoke test (upload → template run → download) | `docs/PLAN-AND-NEXT-STEPS.md` |
-| [ ] | README screenshots + live demo URL | `docs/PLAN-AND-NEXT-STEPS.md` |
-| [ ] | 60-sec demo video | `docs/PLAN-AND-NEXT-STEPS.md` |
+| [x] | CORS from env var | GAPS #3 (done) |
+| [x] | Backend Dockerfile | GAPS #9 (done) |
+| [ ] | Deploy backend (Railway) + env vars | `docs/NEXT-STEPS.md` |
+| [ ] | Deploy frontend (Vercel) + `NEXT_PUBLIC_API_URL` | `docs/NEXT-STEPS.md` |
+| [ ] | Live smoke test (upload → template run → download) | `docs/NEXT-STEPS.md` |
+| [ ] | README screenshots + live demo URL | `docs/NEXT-STEPS.md` |
+| [ ] | 60-sec demo video | `docs/NEXT-STEPS.md` |
 
 ### Phase B — Security & reliability (P1)
 
 | Status | Task | Doc |
 |--------|------|-----|
 | [x] | Rate limiting on `/api/runs/adhoc`, `/api/runs/template`, `/api/upload` | ✅ |
-| [x] | Prompt injection guard | [GAPS #4](./GAPS-TECHNICAL.md) |
-| [x] | MIME validation (`filetype`) | [GAPS #5](./GAPS-TECHNICAL.md) |
-| [x] | File size limits (per-file + batch) | [GAPS #5](./GAPS-TECHNICAL.md) |
-| [x] | LLM retry (429 / 5xx) | [GAPS #6](./GAPS-TECHNICAL.md) |
-| [x] | Frontend error boundary | [GAPS #10](./GAPS-TECHNICAL.md) |
-| [x] | Dedupe `_to_planned_steps()` | [GAPS #7](./GAPS-TECHNICAL.md) |
+| [x] | Prompt injection guard | GAPS #4 (done) |
+| [x] | MIME validation (`filetype`) | GAPS #5 (done) |
+| [x] | File size limits (per-file + batch) | GAPS #5 (done) |
+| [x] | LLM retry (429 / 5xx) | GAPS #6 (done) |
+| [x] | Frontend error boundary | GAPS #10 (done) |
+| [x] | Dedupe `_to_planned_steps()` | GAPS #7 (done) |
 | [x] | Merge pre-deploy work to `develop` and `main` | PR #3, `800cc03` |
 
 ### Phase C — Ops & quality (P2)
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [ ] | GitHub Actions CI (`pytest` + `npm run build`) | [GAPS #12](./GAPS-TECHNICAL.md) |
-| [ ] | Upload file cleanup (24h TTL sweep) | [GAPS #8](./GAPS-TECHNICAL.md) |
-| [ ] | System prompts in config/files | [GAPS #15](./GAPS-TECHNICAL.md) |
-| [ ] | Frontend tests (Vitest) | [GAPS #14](./GAPS-TECHNICAL.md) |
-| [ ] | Usage metering (Groq tokens per run) | [GAPS #13](./GAPS-TECHNICAL.md) |
+| [ ] | GitHub Actions CI (`pytest` + `npm run build`) | GAPS #12 (done) |
+| [ ] | Upload file cleanup (24h TTL sweep) | GAPS #8 (done) |
+| [ ] | System prompts in config/files | GAPS #15 (done) |
+| [ ] | Frontend tests (Vitest) | GAPS #14 (done) |
+| [ ] | Usage metering (Groq tokens per run) | GAPS #13 (done) |
 
 ### Phase D — Auth (before public launch)
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [ ] | Supabase Auth provider (password / magic link) | [GAPS #1](./GAPS-TECHNICAL.md) |
-| [ ] | Frontend Supabase JS sign-in/sign-up | [GAPS #1](./GAPS-TECHNICAL.md) |
-| [ ] | Keep `email` provider for local dev/tests | [GAPS #1](./GAPS-TECHNICAL.md) |
+| [ ] | Supabase Auth provider (password / magic link) | GAPS #1 (done) |
+| [ ] | Frontend Supabase JS sign-in/sign-up | GAPS #1 (done) |
+| [ ] | Keep `email` provider for local dev/tests | GAPS #1 (done) |
 
 ### Phase E — Template library (V1.0.1) ✅
 
@@ -506,7 +509,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 |--------|------|-----|
 | [x] | Three-layer model: master → run versions → workflow versions | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | [x] | `user_template_versions` + `refinement_events` tables (migration 007) | `supabase/migrations/007_*.sql` |
-| [x] | Supabase Storage bucket `user-templates` for payloads | [SUPABASE_SETUP.md](./backend/SUPABASE_SETUP.md) |
+| [x] | Supabase Storage bucket `user-templates` for payloads | [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) |
 | [x] | `POST /api/runs/{id}/refine` + version pointer dedup in Postgres | API |
 | [x] | List / preview / revert APIs (**workflow scope only**) | `template_versions.py` |
 | [x] | Frontend workflow settings + export modals | Frontend V2 |
@@ -517,21 +520,21 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Version | Feature | Doc |
 |--------|---------|---------|-----|
-| [x] | V1.1 | Email delivery (Resend) — `output.email` agent | [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
-| [x] | V1.2 | Google Sheets push — `output.google_sheets` | [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
-| [x] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
-| [x] | V2.0 | Frontend V2 + Backend V2 delivery APIs | [FRONTEND-V2-PLAN](./FRONTEND-V2-PLAN.md), [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
-| [ ] | V2.1 | Live PDF preview + field highlights | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| [ ] | V2.1 | Auto-correct / learning from user edits | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [x] | V1.1 | Email delivery (Resend) — `output.email` agent | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | V1.2 | Google Sheets push — `output.google_sheets` | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | V2.0 | Frontend V2 + Backend V2 delivery APIs | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [ ] | V2.1 | Live PDF preview + field highlights | [NEXT-STEPS.md](./NEXT-STEPS.md) |
+| [ ] | V2.1 | Auto-correct / learning from user edits | [NEXT-STEPS.md](./NEXT-STEPS.md) |
 | [ ] | V3.0 | Inbound email auto-reply to sender | partial webhook in V2 |
-| [ ] | V3.0 | Watch folder / inbox automation | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [ ] | V3.0 | Watch folder / inbox automation | [NEXT-STEPS.md](./NEXT-STEPS.md) |
 
 ### Phase G — New agents (planned)
 
 | Status | Agent type | Version | Doc |
 |--------|------------|---------|-----|
-| [x] | `output.email` | V1.1 | [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
-| [x] | `output.google_sheets` | V1.2 | [BACKEND-V2-PLAN](./BACKEND-V2-PLAN.md) |
+| [x] | `output.email` | V1.1 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | `output.google_sheets` | V1.2 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | [ ] | `transform.summarizer` | V1.3 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `transform.classifier` | V2.0 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `processor.table_extract` | V2.0 | [AGENTS.md](./AGENTS.md) |
@@ -544,11 +547,11 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 | Status | Task | Doc |
 |--------|------|-----|
-| [ ] | SSE / WebSockets for run status (replace polling) | [GAPS #11](./GAPS-TECHNICAL.md) |
+| [ ] | SSE / WebSockets for run status (replace polling) | GAPS #11 (done) |
 | [ ] | S3 document backend (registry ready) | SPEC Future |
-| [ ] | `global-error.tsx` (optional) | [GAPS #10](./GAPS-TECHNICAL.md) |
-| [x] | Chat refinement: cache OCR text on run for partial re-run | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
-| [x] | Chat refinement: `parent_run_id` lineage column | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+| [ ] | `global-error.tsx` (optional) | GAPS #10 (done) |
+| [x] | Chat refinement: cache OCR text on run for partial re-run | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | Chat refinement: `parent_run_id` lineage column | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 
 ### Completed (reference)
 
@@ -560,7 +563,7 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] Persistence + auth registry, FastAPI Depends
 - [x] Full Next.js frontend (/, results, workflows, account)
 - [x] Email sign-in, workflow save/rerun, run history
-- [x] Docs transcribed from screenshots: ENGINEERING-PRINCIPLES, GAPS-TECHNICAL, TEMPLATES, AGENTS, CHAT-REFINEMENT, FEATURE-ROADMAP, PROMPTS, README (+ MARKET-ANALYSIS stub)
+- [x] Core docs: ENGINEERING-PRINCIPLES, ARCHITECTURE, SPEC, AGENTS, NEXT-STEPS, DEPLOYMENT
 - [x] Template library (code-defined, 7 templates, `POST /api/runs/template`)
 - [x] Versioned user templates (workflow scope; Storage + branch/revert APIs, 66 tests)
 - [x] Frontend V2 + Backend V2 (email, Sheets, inbound, workflow settings)

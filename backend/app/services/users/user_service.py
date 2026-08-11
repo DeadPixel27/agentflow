@@ -29,6 +29,22 @@ class UserService:
             raise UserNotFoundError(f"User not found: {user_id}")
         return user
 
+    def update_name(self, user_id: str, name: str) -> UserRecord:
+        user = self.fetch_user(user_id)
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValueError("Name is required")
+        if cleaned == user.name:
+            return user
+        updated = UserRecord(
+            user_id=user.user_id,
+            name=cleaned,
+            email=user.email,
+            created_at=user.created_at,
+        )
+        self._repo.save_user(updated)
+        return updated
+
     def fetch_all_users(self) -> list[UserRecord]:
         return self._repo.list_users()
 

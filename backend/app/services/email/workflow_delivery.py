@@ -46,7 +46,8 @@ async def deliver_workflow_defaults(
 
     default_sheets_url = (workflow.default_sheets_url or "").strip()
     if default_sheets_url:
-        await _push_default_sheets(run, rows, default_sheets_url)
+        sheet_name = (workflow.default_sheet_name or "").strip() or _DEFAULT_SHEET_NAME
+        await _push_default_sheets(run, rows, default_sheets_url, sheet_name)
 
 
 async def _send_default_email(
@@ -158,6 +159,7 @@ async def _push_default_sheets(
     run: RunResult,
     rows: list[dict[str, Any]],
     spreadsheet_url: str,
+    sheet_name: str,
 ) -> None:
     user_id = run.user_id
     reserved = False
@@ -189,7 +191,7 @@ async def _push_default_sheets(
         result = await push_rows_to_sheet(
             spreadsheet_url,
             rows,
-            sheet_name=_DEFAULT_SHEET_NAME,
+            sheet_name=sheet_name,
         )
         logger.info(
             "Auto-pushed run %s to sheets %s (%d rows)",

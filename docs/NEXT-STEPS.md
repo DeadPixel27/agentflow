@@ -1,58 +1,50 @@
-# AgentFlow — Next Steps
+# Nexora — Next Steps
 
-**Updated:** 2026-08-10  
+**Updated:** 2026-08-11  
 **Branch:** `develop`
 
-Launch product through V3 + launch features is built. Recent ship: side-by-side run results, run history UX, email/sheets outbound testing, unsigned-home auth fix, shared user session for nav badge, realistic sample invoice.
+Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 
 ---
 
-## Done recently
-
-- [x] PDF / document side-by-side on run page (All results + per-doc view)
-- [x] Vertical / horizontal results layout toggle (per-doc)
-- [x] Refine UX: Apply clearly re-runs **all documents** in the run
-- [x] Batch CSV export (already covered by full `result.rows` + Export bar)
-- [x] Run history: filenames, timestamps, doc counts, status/search filters; original filename persistence
-- [x] Email + Sheets outbound testing
-- [x] Fix unsigned home + auth UX (public templates catalog; 401 redirect only with token; Back to home on `/account`)
-- [x] Fix nav badge after login (`UserProvider` shared session)
-- [x] Replace sample invoice PDF (frontend + backend samples)
-
----
-
-## Next (recommended order)
+## This week (ship)
 
 | # | Task | Est. | Notes |
 |---|------|------|-------|
-| 1 | **Confirm + enforce hard usage caps per feature** | ~3–4h | Audit free-tier limits end-to-end and set hard caps (not soft warnings only) for every billable/abusable surface: **extract / runs (pages)**, **refine**, **emails sent**, **Sheets uploads/pushes**, and related API rate limits. Confirm monthly + daily global ceilings in config match product intent; enforce 429s consistently; surface clear limit UI. For **refine**, add an out-of-scope prompt filter so misuse / off-topic queries are rejected before LLM spend. |
-| 2 | **Deploy** | ~4h | Supabase + Railway (backend) + Vercel (frontend) + domain + smoke test. |
-| 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy **before** any hardening. |
-| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README with screenshots + live URL. |
+| 1 | **Hard usage caps per feature** | ~3–4h | Hard caps (not soft warnings) for extract/pages, refine, emails, Sheets; clear 429 UI. Refine: reject out-of-scope prompts before LLM spend. |
+| 2 | **Deploy** | ~4h | Supabase + Railway + Vercel + domain + smoke test. See [DEPLOYMENT.md](./DEPLOYMENT.md). |
+| 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
+| 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live URL. |
 
 ---
 
-## Deferred
+## Deferred (post-launch)
 
-- SEO template pages (`/templates/[slug]`) — hold for now
-- Rebrand from AgentFlow — hold for now
-- Inbound email IMAP poll (unread + attachments every 15 min → one batched run → mark read) — hold for later
-- **Job queue / Redis / multi-replica workers**, extraction parallelism, scaling triggers — see [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
+- SEO template pages (`/templates/[slug]`)
+- Inbound email IMAP poll (unread + attachments → batched run)
+- Job queue / Redis / multi-replica — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
+- GitHub Actions CI (`pytest` + `npm run build`)
+- Upload TTL cleanup sweep
+- Frontend tests (Vitest)
+- Supabase Auth (password / magic link) — JWT+Google is enough for launch
 
 ---
 
-## Hold until after launch
+## Later product ideas
 
-- Adhoc field-name locking (optional chips → fixed `json_schema`) — English planner already shares one field list per run; skip for launch
-- Targeted extraction hardening (only if real-doc tests fail)
-- Editable cells + corrections
-- Run diff / validation suggestions
-- Stripe, self-learning, rule engine, dynamic schema via chat
+| Idea | Notes |
+|------|-------|
+| Live PDF preview + field highlights | Split view; highlight source spans |
+| Auto-correct / learning from edits | Store corrections → few-shot on next similar docs |
+| Editable cells + run diff / validation suggestions | Results UX polish |
+| Watch folder / inbox automation | Drive/Gmail → saved workflow → Sheets/email |
+| New agents | Summarizer, classifier, table extract — [AGENTS.md](./AGENTS.md) |
+| Stripe, rule engine, dynamic schema via chat | Monetization / power features |
 
-**Research locks (do not reopen for launch):** stay on GPT-4o, keep RapidOCR, per-page metering, no blind prompt hardening, no Claude routing yet.
+**Research locks (do not reopen for launch):** GPT-4o extract, RapidOCR, per-page metering, no blind prompt hardening, no Claude routing yet.
 
 ---
 
 ## Immediate next action
 
-Start **#1 Confirm + enforce hard usage caps per feature** (including refine out-of-scope filter), then **#2 Deploy**.
+Start **#1 Hard usage caps**, then **#2 Deploy**.

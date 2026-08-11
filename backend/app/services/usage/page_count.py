@@ -17,6 +17,24 @@ from app.persistence import get_document_store
 logger = logging.getLogger("usage")
 
 
+def count_pages_from_bytes(filename: str, data: bytes) -> int:
+    """Return page count for in-memory file bytes (PDF pages or 1 for images)."""
+    suffix = Path(filename or "").suffix.lower()
+    if suffix == ".pdf":
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+            try:
+                return max(len(doc), 1)
+            finally:
+                doc.close()
+        except Exception as e:
+            logger.warning("Failed to count PDF pages for %s: %s", filename, e)
+            return 1
+    if suffix in {".png", ".jpg", ".jpeg"}:
+        return 1
+    return 1
+
+
 def count_file_pages(file_path: Path) -> int:
     """Return page count for a single file (PDF pages or 1 for images)."""
     suffix = file_path.suffix.lower()
@@ -33,6 +51,19 @@ def count_file_pages(file_path: Path) -> int:
     if suffix in {".png", ".jpg", ".jpeg"}:
         return 1
     return 1
+
+
+def assert_within_page_limit(filename: str, pages: int) -> None:
+    """Raise InvalidUploadError when a single file exceeds max_pages_per_file."""
+    from app.config import settings
+    from app.models.domain.document import InvalidUploadError
+
+    limit = settings.max_pages_per_file
+    if pages > limit:
+        raise InvalidUploadError(
+            f"File '{filename}' has {pages} pages. "
+            f"Maximum is {limit} pages per file."
+        )
 
 
 async def count_upload_pages(upload_id: str) -> int:

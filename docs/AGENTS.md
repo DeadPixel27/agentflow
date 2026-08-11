@@ -1,4 +1,4 @@
-# AgentFlow — Agent Roster & Expansion Plan
+# Nexora — Agent Roster & Expansion Plan
 
 *Current agents, planned agents, and how to add new ones.*
 

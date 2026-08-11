@@ -74,6 +74,18 @@ class InboundEmailService:
             logger.warning("Inbound from %s has no attachments", sender)
             raise ValueError("Email has no attachments to process")
 
+        from app.services.usage.page_count import (
+            assert_within_page_limit,
+            count_pages_from_bytes,
+        )
+
+        # Fail closed before storage — same per-file page cap as HTTP upload.
+        for att in attachments:
+            name = att.get("filename") or "attachment"
+            content = att.get("content") or b""
+            pages = count_pages_from_bytes(name, content)
+            assert_within_page_limit(name, pages)
+
         upload_id = str(uuid.uuid4())
         for att in attachments:
             await self._doc_store.save_document_bytes(

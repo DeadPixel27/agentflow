@@ -5,15 +5,15 @@ Follow these steps to persist users, workflows, and runs in Postgres (survives s
 ## 1. Create a project
 
 1. Go to [https://supabase.com](https://supabase.com) and sign in
-2. **New project** → pick org, name (e.g. `agentflow`), database password, region
+2. **New project** → pick org, name (e.g. `nexora`), database password, region
 3. Wait ~2 minutes for provisioning
 
 ## 2. Run the schema
 
 1. In Supabase Dashboard → **SQL Editor** → **New query**
-2. Copy the entire contents of [`supabase/schema.sql`](supabase/schema.sql)
+2. Copy the entire contents of [`backend/supabase/schema.sql`](../backend/supabase/schema.sql)
 3. Click **Run**
-4. Run [`supabase/seed_templates.sql`](supabase/seed_templates.sql) the same way (pipeline template catalog)
+4. Run [`backend/supabase/seed_templates.sql`](../backend/supabase/seed_templates.sql) the same way (pipeline template catalog)
 5. You should see `Success` for both
 
 Tables created:
@@ -30,9 +30,9 @@ Tables created:
 
 ### Existing projects — run migrations
 
-If the project already had an older schema, apply numbered files under [`supabase/migrations/`](supabase/migrations/) in order (through at least `012_uploads.sql` and `013_storage_private.sql`) instead of re-running the full `schema.sql`.
+If the project already had an older schema, apply numbered files under [`backend/supabase/migrations/`](../backend/supabase/migrations/) in order (through at least `012_uploads.sql` and `013_storage_private.sql`) instead of re-running the full `schema.sql`.
 
-> Older note: [`002_add_users_and_run_document_ids.sql`](supabase/migrations/002_add_users_and_run_document_ids.sql) was the first incremental migration for very early schemas.
+> Older note: [`002_add_users_and_run_document_ids.sql`](../backend/supabase/migrations/002_add_users_and_run_document_ids.sql) was the first incremental migration for very early schemas.
 
 ## 3. Get API keys
 
@@ -73,7 +73,7 @@ Uploaded PDFs/images and user-template version payloads are stored in **private*
 4. Click **Create bucket**
 5. Repeat for `user-templates` (must match `SUPABASE_USER_TEMPLATES_BUCKET`) — **Public**: **OFF**
 
-Or run [`supabase/migrations/013_storage_private.sql`](supabase/migrations/013_storage_private.sql) in the SQL Editor — it upserts both buckets as private and adds a restrictive Storage policy so `anon` / `authenticated` cannot read or write those objects (service role still works).
+Or run [`backend/supabase/migrations/013_storage_private.sql`](../backend/supabase/migrations/013_storage_private.sql) in the SQL Editor — it upserts both buckets as private and adds a restrictive Storage policy so `anon` / `authenticated` cannot read or write those objects (service role still works).
 
 ### Defense in depth
 
@@ -132,7 +132,7 @@ Expected:
 ```json
 {
   "status": "ok",
-  "service": "agentflow-api",
+  "service": "nexora-api",
   "persistence": "supabase",
   "database": "connected",
   "document_storage": "supabase"

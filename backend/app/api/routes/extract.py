@@ -21,6 +21,7 @@ from app.services.extraction.field_extractor import (
     extract_fields_from_upload,
 )
 from app.services.documents.upload_loader import UploadNotFoundError
+from app.services.llm.openai_cost import OpenAIBudgetError
 from app.services.usage.page_count import count_upload_pages
 
 router = APIRouter(prefix="/api", tags=["extract"])
@@ -69,6 +70,9 @@ async def extract_from_text(
     except ValueError as e:
         await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=400, detail=str(e))
+    except OpenAIBudgetError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except RuntimeError as e:
         await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=502, detail=str(e))
@@ -100,6 +104,9 @@ async def extract_from_upload(
     except ValueError as e:
         await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=400, detail=str(e))
+    except OpenAIBudgetError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except RuntimeError as e:
         await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=502, detail=str(e))

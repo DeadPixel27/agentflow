@@ -25,7 +25,7 @@ class SheetsHandler(StepHandler):
         result = await push_rows_to_sheet(
             spreadsheet_url,
             rows,
-            sheet_name=config.get("sheet_name", "AgentFlow Results"),
+            sheet_name=config.get("sheet_name", "Nexora Results"),
         )
 
         return StepResult(

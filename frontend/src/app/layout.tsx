@@ -21,7 +21,7 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "AgentFlow",
+  title: "Nexora",
   description:
     "Upload documents, describe a task in plain English, and run an AI agent pipeline.",
 };

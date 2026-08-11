@@ -25,7 +25,7 @@ class EmailHandler(StepHandler):
 
         request = EmailRequest(
             to_email=to_email,
-            subject=config.get("subject", "Your AgentFlow Results"),
+            subject=config.get("subject", "Your Nexora Results"),
             rows=rows,
             pipeline_name=ctx.task_description[:80],
             doc_count=len(ctx.data.get("documents", [])),
