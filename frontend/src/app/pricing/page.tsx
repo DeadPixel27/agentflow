@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Mail } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,11 @@ import { ApiError, joinWaitlist } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { loadStoredUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
+import {
+  WAITLIST_SOURCES,
+  normalizeWaitlistSource,
+  type WaitlistSource,
+} from "@/lib/waitlist-source";
 
 function PricingCard({
   title,
@@ -52,13 +58,43 @@ function PricingCard({
   );
 }
 
-export default function PricingPage() {
+function sourceBanner(source: WaitlistSource): React.ReactNode {
+  if (source === WAITLIST_SOURCES.pagesExhausted) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        You&apos;ve hit this month&apos;s free page limit. Join the Pro waitlist
+        and we&apos;ll notify you when higher limits open.
+      </div>
+    );
+  }
+  if (source === WAITLIST_SOURCES.inboundEmail) {
+    return (
+      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950 flex gap-3">
+        <Mail className="h-5 w-5 shrink-0 mt-0.5 text-blue-700" />
+        <div className="space-y-1">
+          <p className="font-medium">Inbound email is on the Pro roadmap</p>
+          <p className="text-blue-900/80">
+            Forward invoices and docs to a workflow address and Nexora runs
+            extraction automatically. Join the waitlist so we know you want it.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function PricingPageInner() {
+  const searchParams = useSearchParams();
+  const source = normalizeWaitlistSource(searchParams.get("source"));
+
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [joined, setJoined] = useState(false);
 
   const stored = loadStoredUser();
+  const banner = sourceBanner(source);
 
   async function handleJoinWaitlist(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +109,7 @@ export default function PricingPage() {
       const result = await joinWaitlist(
         waitlistEmail,
         name.trim() || stored?.name || "",
-        "pricing_page",
+        source,
       );
       setJoined(true);
       toastSuccess(result.message);
@@ -94,6 +130,8 @@ export default function PricingPage() {
       />
       <main className="flex-1 overflow-y-auto px-4 py-8">
         <div className="mx-auto max-w-[800px] space-y-10">
+          {banner}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <PricingCard
               title="Free"
@@ -121,6 +159,7 @@ export default function PricingPage() {
               highlight
               features={[
                 "Unlimited pages",
+                "Inbound email → workflow runs",
                 "Priority extraction (faster models)",
                 "Custom templates",
                 "API access",
@@ -169,7 +208,11 @@ export default function PricingPage() {
                       {loading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {stored?.email ? "Join waitlist" : "Join Pro waitlist"}
+                      {source === WAITLIST_SOURCES.inboundEmail
+                        ? "Join waitlist for inbound email"
+                        : stored?.email
+                          ? "Join waitlist"
+                          : "Join Pro waitlist"}
                     </Button>
                   </form>
                 )
@@ -181,15 +224,29 @@ export default function PricingPage() {
             <p>
               Questions?{" "}
               <a
-                href="mailto:deadpixel27@agentflow.app"
+                href="mailto:deadpixel27@nexora.app"
                 className="text-primary underline"
               >
-                deadpixel27@agentflow.app
+                deadpixel27@nexora.app
               </a>
             </p>
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="v2-page items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <PricingPageInner />
+    </Suspense>
   );
 }

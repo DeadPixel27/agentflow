@@ -1,13 +1,14 @@
-"""Admin routes — owner master template refining (API key guarded)."""
+"""Admin routes — owner master template refining + OpenAI spend snapshot."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.api.dependencies import MasterRefineServiceDep
 from app.config import settings
+from app.services.llm.openai_cost import get_openai_spend_today
 
-router = APIRouter(prefix="/api/admin/templates", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
@@ -17,7 +18,18 @@ def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Invalid admin API key")
 
 
-@router.get("/feedback")
+@router.get("/openai-spend")
+async def openai_spend_today(
+    _: None = Depends(_require_admin),
+) -> dict[str, Any]:
+    """In-process estimated OpenAI spend for the current UTC day."""
+    return get_openai_spend_today()
+
+
+templates_router = APIRouter(prefix="/templates", tags=["admin"])
+
+
+@templates_router.get("/feedback")
 async def list_refinement_feedback(
     master: MasterRefineServiceDep,
     template_id: Optional[str] = None,
@@ -27,7 +39,7 @@ async def list_refinement_feedback(
     return master.list_feedback(template_id=template_id, limit=limit)
 
 
-@router.post("/{template_id}/synthesize")
+@templates_router.post("/{template_id}/synthesize")
 async def synthesize_master_template(
     template_id: str,
     master: MasterRefineServiceDep,
@@ -39,7 +51,7 @@ async def synthesize_master_template(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/{template_id}/preview")
+@templates_router.post("/{template_id}/preview")
 async def preview_master_template(
     template_id: str,
     synthesis: dict,
@@ -58,7 +70,7 @@ async def preview_master_template(
     }
 
 
-@router.post("/{template_id}/apply")
+@templates_router.post("/{template_id}/apply")
 async def apply_master_template(
     template_id: str,
     synthesis: dict,
@@ -77,3 +89,6 @@ async def apply_master_template(
         "rules": updated.rules,
         "message": "Master template updated.",
     }
+
+
+router.include_router(templates_router)

@@ -1,4 +1,4 @@
-# AgentFlow
+# Nexora
 
 Describe what you want done with your documents → AI builds and runs a multi-agent pipeline automatically.
 

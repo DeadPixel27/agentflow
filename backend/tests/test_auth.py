@@ -36,6 +36,15 @@ def test_sign_in_restores_existing_user_by_email(auth):
     assert second.user_id == first.user_id
 
 
+def test_sign_in_preserves_display_name(auth):
+    first, _ = auth.sign_in_or_register("Original Name", "deadpixel27@example.com")
+    second, is_new = auth.sign_in_or_register("Google Name", "deadpixel27@example.com")
+
+    assert is_new is False
+    assert second.user_id == first.user_id
+    assert second.name == "Original Name"
+
+
 def test_sign_in_email_is_case_insensitive(auth):
     first, _ = auth.sign_in_or_register("DeadPixel27", "DeadPixel27@Example.com")
     second, is_new = auth.sign_in_or_register("DeadPixel27", "deadpixel27@example.com")

@@ -343,7 +343,7 @@ export default function HomePage() {
           </div>
 
           <p className="text-center text-xs text-muted-foreground pt-2">
-            5 docs free · Results in seconds
+            50 pages free · Results in seconds
           </p>
         </div>
       </main>

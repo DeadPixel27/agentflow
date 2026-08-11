@@ -55,6 +55,7 @@ def _to_workflow_response(workflow, *, current_version_number: Optional[int] = N
         created_at=workflow.created_at,
         default_email=workflow.default_email,
         default_sheets_url=workflow.default_sheets_url,
+        default_sheet_name=workflow.default_sheet_name,
     )
 
 
@@ -273,6 +274,7 @@ async def update_workflow_settings(
             description=body.description,
             default_email=body.default_email,
             default_sheets_url=body.default_sheets_url,
+            default_sheet_name=body.default_sheet_name,
         )
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

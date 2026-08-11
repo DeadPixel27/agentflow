@@ -6,7 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.config import settings
 from app.rate_limit import limiter
@@ -17,6 +17,25 @@ router = APIRouter(prefix="/api/waitlist", tags=["waitlist"])
 
 _memory_waitlist: list[dict[str, Any]] = []
 
+# Attribution for Pro interest — keep in sync with frontend waitlist-source.ts
+ALLOWED_WAITLIST_SOURCES = frozenset(
+    {
+        "normal",
+        "pages_exhausted",
+        "inbound_email",
+        "pricing_page",  # legacy → normalized to normal
+    }
+)
+
+
+def normalize_waitlist_source(raw: str | None) -> str:
+    value = (raw or "normal").strip().lower() or "normal"
+    if value == "pricing_page":
+        return "normal"
+    if value not in ALLOWED_WAITLIST_SOURCES:
+        return "normal"
+    return value
+
 
 def reset_memory_waitlist() -> None:
     """Clear in-memory waitlist (tests only)."""
@@ -26,7 +45,12 @@ def reset_memory_waitlist() -> None:
 class WaitlistRequest(BaseModel):
     email: EmailStr
     name: str = ""
-    source: str = "pricing_page"
+    source: str = "normal"
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def _normalize_source(cls, value: Any) -> str:
+        return normalize_waitlist_source(str(value) if value is not None else None)
 
 
 class WaitlistResponse(BaseModel):
@@ -63,6 +87,14 @@ async def join_waitlist(
         if client is None:
             for entry in _memory_waitlist:
                 if entry.get("email") == email:
+                    prior = entry.get("source") or "normal"
+                    if prior != payload.source:
+                        logger.info(
+                            "Waitlist re-interest (memory): %s prior=%s new=%s",
+                            email,
+                            prior,
+                            payload.source,
+                        )
                     return WaitlistResponse(
                         message="You're already on the waitlist! We'll reach out soon.",
                         already_joined=True,
@@ -82,9 +114,20 @@ async def join_waitlist(
             )
 
         existing = (
-            client.table("waitlist").select("id").eq("email", email).execute()
+            client.table("waitlist")
+            .select("id, source")
+            .eq("email", email)
+            .execute()
         )
         if existing.data:
+            prior = existing.data[0].get("source") or "normal"
+            if prior != payload.source:
+                logger.info(
+                    "Waitlist re-interest: %s prior=%s new=%s",
+                    email,
+                    prior,
+                    payload.source,
+                )
             return WaitlistResponse(
                 message="You're already on the waitlist! We'll reach out soon.",
                 already_joined=True,

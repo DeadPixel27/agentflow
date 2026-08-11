@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    service: str = "agentflow-api"
+    service: str = "nexora-api"
     persistence: str = "memory"
     database: Optional[str] = None
     document_storage: str = "local"

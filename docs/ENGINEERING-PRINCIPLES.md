@@ -1,9 +1,9 @@
-# AgentFlow — Engineering Principles
+# Nexora — Engineering Principles
 *Non-negotiable rules for every line of code. Reference this before every feature.*
 
 ## Why This File Exists
 
-AI coding assistants hallucinate. They forget patterns, invent imports, skip error handling, and break layering. This document is the **source of truth** for how AgentFlow code must be written. Every PR, every feature, every refactor must follow these rules.
+AI coding assistants hallucinate. They forget patterns, invent imports, skip error handling, and break layering. This document is the **source of truth** for how Nexora code must be written. Every PR, every feature, every refactor must follow these rules.
 
 ---
 

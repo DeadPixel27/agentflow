@@ -1,0 +1,27 @@
+---
+description: Always park deferred scaling/ops/extraction work in docs/SCALING-AND-JOBS.md
+alwaysApply: true
+---
+
+# Scaling & jobs backlog
+
+When you **defer**, **decide against for launch**, or **discover** a future need related to:
+
+- job queues / Redis / workers / multi-replica
+- extraction architecture (chunking, parallel OCR/LLM, reconcile)
+- page/file/token limits that will change later
+- OpenAI/cost metering ops beyond current in-process estimates
+- orphan runs, retries, TTL cleanup, capacity triggers
+
+…you **must** update [`docs/SCALING-AND-JOBS.md`](docs/SCALING-AND-JOBS.md) in the **same change**.
+
+## Do
+
+- Add a short row or subsection: **current behavior**, **why deferred**, **trigger to build**, **preferred approach** if known.
+- Keep launch posture tables accurate when you ship a new guardrail (e.g. max pages/file).
+- Prefer editing SCALING-AND-JOBS over leaving “later” only in chat or NEXT-STEPS.
+
+## Don’t
+
+- Ship a “we’ll chunk later” / “when we scale…” comment in code without a matching SCALING-AND-JOBS note.
+- Put Redis/worker/chunking implementation detail only in NEXT-STEPS — that file is near-term product ship; scaling backlog lives here.

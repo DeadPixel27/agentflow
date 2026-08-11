@@ -1,6 +1,6 @@
 # Frontend
 
-Next.js app for AgentFlow.
+Next.js app for Nexora.
 
 ```bash
 cp .env.local.example .env.local

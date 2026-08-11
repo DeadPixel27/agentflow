@@ -7,13 +7,22 @@ from fastapi import APIRouter, HTTPException, Request
 from app.api.dependencies import AuthServiceDep, CurrentUserDep, UserServiceDep, WorkflowServiceDep
 from app.api.ownership import require_self
 from app.config import settings
-from app.models.api.users import UserCreateRequest, UserResponse
+from app.models.api.users import UserCreateRequest, UserResponse, UserUpdateRequest
 from app.models.api.workflows import WorkflowSummaryResponse
 from app.rate_limit import limiter
 from app.services.usage.metering import get_usage_summary
 from app.services.users.user_service import UserNotFoundError
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+def _to_user_response(user) -> UserResponse:
+    return UserResponse(
+        user_id=user.user_id,
+        name=user.name,
+        email=user.email,
+        created_at=user.created_at,
+    )
 
 
 @router.post("", response_model=UserResponse)
@@ -33,12 +42,7 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Email is required")
 
     user, _ = auth.sign_in_or_register(body.name, body.email)
-    return UserResponse(
-        user_id=user.user_id,
-        name=user.name,
-        email=user.email,
-        created_at=user.created_at,
-    )
+    return _to_user_response(user)
 
 
 @router.get("/me/usage")
@@ -56,6 +60,22 @@ async def get_me(current_user: CurrentUserDep) -> UserResponse:
     return current_user
 
 
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    body: UserUpdateRequest,
+    current_user: CurrentUserDep,
+    users: UserServiceDep,
+) -> UserResponse:
+    """Update the authenticated user's display name."""
+    try:
+        user = users.update_name(current_user.user_id, body.name)
+    except UserNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _to_user_response(user)
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
@@ -69,12 +89,7 @@ async def get_user(
     except UserNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    return UserResponse(
-        user_id=user.user_id,
-        name=user.name,
-        email=user.email,
-        created_at=user.created_at,
-    )
+    return _to_user_response(user)
 
 
 @router.get("/{user_id}/workflows", response_model=list[WorkflowSummaryResponse])

@@ -1,4 +1,4 @@
-# AgentFlow — Next Steps
+# Nexora — Next Steps
 
 **Updated:** 2026-08-11  
 **Branch:** `develop`
@@ -21,7 +21,6 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 ## Deferred (post-launch)
 
 - SEO template pages (`/templates/[slug]`)
-- Rebrand from AgentFlow
 - Inbound email IMAP poll (unread + attachments → batched run)
 - Job queue / Redis / multi-replica — [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
 - GitHub Actions CI (`pytest` + `npm run build`)

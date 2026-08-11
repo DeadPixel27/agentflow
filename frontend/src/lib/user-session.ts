@@ -8,9 +8,9 @@ import {
   type User,
 } from "@/lib/api";
 
-const USER_ID_KEY = "agentflow_user_id";
-const USER_NAME_KEY = "agentflow_user_name";
-const USER_EMAIL_KEY = "agentflow_user_email";
+const USER_ID_KEY = "nexora_user_id";
+const USER_NAME_KEY = "nexora_user_name";
+const USER_EMAIL_KEY = "nexora_user_email";
 
 export interface StoredUser {
   user_id: string;
@@ -138,6 +138,14 @@ export async function refreshStoredUser(): Promise<StoredUser | null> {
   } catch {
     return stored;
   }
+}
+
+export function applyStoredUserUpdate(partial: Partial<StoredUser>): StoredUser | null {
+  const stored = loadStoredUser();
+  if (!stored) return null;
+  const updated: StoredUser = { ...stored, ...partial };
+  saveStoredUser(updated);
+  return updated;
 }
 
 export function toStoredUser(user: User): StoredUser {

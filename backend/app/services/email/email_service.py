@@ -92,7 +92,7 @@ async def send_results_email(request: EmailRequest) -> EmailResult:
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;">
       <h2 style="color:#1C1917;">
-        {request.pipeline_name or "AgentFlow"} — Results
+        {request.pipeline_name or "Nexora"} — Results
       </h2>
       <p style="color:#78716C;">
         Processed <strong>{request.doc_count}</strong> document(s) —
@@ -102,7 +102,7 @@ async def send_results_email(request: EmailRequest) -> EmailResult:
       {html_table}
       <hr style="border:none;border-top:1px solid #E7E5E4;margin:16px 0;">
       <p style="color:#A8A29E;font-size:12px;">
-        CSV file attached · Sent by AgentFlow
+        CSV file attached · Sent by Nexora
       </p>
     </div>
     """

@@ -38,6 +38,7 @@ def _reset_phase2_state(monkeypatch):
     monkeypatch.setattr(settings, "free_page_limit_monthly", 50)
     monkeypatch.setattr(settings, "global_daily_page_limit", 500)
     monkeypatch.setattr(settings, "max_refines_per_run", 10)
+    monkeypatch.setattr(settings, "rate_limit_waitlist", "100/minute")
     yield
     metering.reset_memory_usage()
     analytics_events.reset_memory_analytics()
@@ -106,7 +107,7 @@ async def test_refine_limit(monkeypatch):
 def test_waitlist_public_and_dedupes():
     first = client.post(
         "/api/waitlist",
-        json={"email": "pro@example.com", "name": "Pro", "source": "pricing_page"},
+        json={"email": "pro@example.com", "name": "Pro", "source": "normal"},
     )
     assert first.status_code == 200, first.text
     assert first.json()["already_joined"] is False
@@ -117,6 +118,38 @@ def test_waitlist_public_and_dedupes():
     )
     assert second.status_code == 200
     assert second.json()["already_joined"] is True
+
+
+def test_waitlist_normalizes_legacy_and_feature_sources(monkeypatch):
+    from app.api.routes import waitlist as waitlist_route
+
+    waitlist_route.reset_memory_waitlist()
+    monkeypatch.setattr(settings, "rate_limit_waitlist", "100/minute")
+    monkeypatch.setattr(
+        "app.api.routes.waitlist._supabase_client",
+        lambda: None,
+    )
+
+    legacy = client.post(
+        "/api/waitlist",
+        json={"email": "legacy@example.com", "source": "pricing_page"},
+    )
+    assert legacy.status_code == 200
+    assert waitlist_route._memory_waitlist[-1]["source"] == "normal"
+
+    inbound = client.post(
+        "/api/waitlist",
+        json={"email": "inbound@example.com", "source": "inbound_email"},
+    )
+    assert inbound.status_code == 200
+    assert waitlist_route._memory_waitlist[-1]["source"] == "inbound_email"
+
+    pages = client.post(
+        "/api/waitlist",
+        json={"email": "pages@example.com", "source": "pages_exhausted"},
+    )
+    assert pages.status_code == 200
+    assert waitlist_route._memory_waitlist[-1]["source"] == "pages_exhausted"
 
 
 def test_waitlist_requires_no_auth():

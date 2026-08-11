@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { ModalShell } from "@/components/modals/modal-shell";
 import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
+import { SheetsShareHint } from "@/components/sheets-share-hint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +77,7 @@ export function SheetsModal({
           </>
         }
       >
+        <SheetsShareHint compact />
         <div className="space-y-2">
           <Label htmlFor="sheets-url">Spreadsheet URL</Label>
           <Input

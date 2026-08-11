@@ -21,6 +21,7 @@ class WorkflowRecord:
     created_at: Optional[str] = None
     default_email: Optional[str] = None
     default_sheets_url: Optional[str] = None
+    default_sheet_name: Optional[str] = None
 
 
 @dataclass

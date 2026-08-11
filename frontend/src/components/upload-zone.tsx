@@ -6,8 +6,10 @@ import { toast } from "sonner";
 
 import {
   MAX_FILES_PER_UPLOAD,
+  MAX_PAGES_PER_FILE,
   MAX_UPLOAD_SIZE_BYTES,
   MAX_UPLOAD_SIZE_MB,
+  countPdfPages,
   formatFileSize,
 } from "@/lib/upload-limits";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,7 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
   const [dragging, setDragging] = useState(false);
 
   const addFiles = useCallback(
-    (incoming: FileList | File[]) => {
+    async (incoming: FileList | File[]) => {
       const accepted: File[] = [];
 
       for (const file of Array.from(incoming)) {
@@ -36,6 +38,15 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
           );
           continue;
         }
+
+        const pages = await countPdfPages(file);
+        if (pages != null && pages > MAX_PAGES_PER_FILE) {
+          toast.error(
+            `"${file.name}" has ${pages} pages. Max ${MAX_PAGES_PER_FILE} pages per file.`,
+          );
+          continue;
+        }
+
         accepted.push(file);
       }
 
@@ -61,7 +72,7 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          if (!disabled) addFiles(e.dataTransfer.files);
+          if (!disabled) void addFiles(e.dataTransfer.files);
         }}
         className={cn(
           "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors",
@@ -74,7 +85,7 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
           <p className="font-medium">Drop PDFs or images here</p>
           <p className="text-sm text-muted-foreground mt-1">
             Up to {MAX_FILES_PER_UPLOAD} files — PDF, PNG, JPG — max{" "}
-            {MAX_UPLOAD_SIZE_MB} MB each
+            {MAX_UPLOAD_SIZE_MB} MB · {MAX_PAGES_PER_FILE} pages each
           </p>
         </div>
         <label className="cursor-pointer text-sm font-medium text-primary underline-offset-4 hover:underline">
@@ -85,7 +96,7 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
             multiple
             accept=".pdf,.png,.jpg,.jpeg"
             disabled={disabled}
-            onChange={(e) => e.target.files && addFiles(e.target.files)}
+            onChange={(e) => e.target.files && void addFiles(e.target.files)}
           />
         </label>
       </div>

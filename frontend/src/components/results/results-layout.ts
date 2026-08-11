@@ -1,6 +1,6 @@
 export type ResultsLayout = "horizontal" | "vertical";
 
-const STORAGE_KEY = "agentflow:results-layout";
+const STORAGE_KEY = "nexora:results-layout";
 
 export function loadResultsLayout(): ResultsLayout {
   if (typeof window === "undefined") return "vertical";

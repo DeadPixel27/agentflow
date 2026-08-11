@@ -73,6 +73,10 @@ export function EmailModal({ open, onClose, runId, defaultTo = "" }: EmailModalP
       >
         <div className="space-y-2">
           <Label htmlFor="email-to">To</Label>
+          <p className="text-xs text-muted-foreground">
+            Nexora emails results from its own sender address. No inbox sharing
+            required — enter the recipient only.
+          </p>
           <Input
             id="email-to"
             type="email"

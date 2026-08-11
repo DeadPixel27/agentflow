@@ -5,7 +5,7 @@ Follow these steps to persist users, workflows, and runs in Postgres (survives s
 ## 1. Create a project
 
 1. Go to [https://supabase.com](https://supabase.com) and sign in
-2. **New project** → pick org, name (e.g. `agentflow`), database password, region
+2. **New project** → pick org, name (e.g. `nexora`), database password, region
 3. Wait ~2 minutes for provisioning
 
 ## 2. Run the schema
@@ -132,7 +132,7 @@ Expected:
 ```json
 {
   "status": "ok",
-  "service": "agentflow-api",
+  "service": "nexora-api",
   "persistence": "supabase",
   "database": "connected",
   "document_storage": "supabase"

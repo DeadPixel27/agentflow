@@ -264,6 +264,7 @@ class WorkflowService:
         description: Optional[str] = None,
         default_email: Optional[str] = None,
         default_sheets_url: Optional[str] = None,
+        default_sheet_name: Optional[str] = None,
     ) -> WorkflowRecord:
         """Update workflow metadata and delivery defaults."""
         workflow = self._repo.get_workflow(workflow_id)
@@ -278,6 +279,8 @@ class WorkflowService:
             workflow.default_email = default_email.strip() or None
         if default_sheets_url is not None:
             workflow.default_sheets_url = default_sheets_url.strip() or None
+        if default_sheet_name is not None:
+            workflow.default_sheet_name = default_sheet_name.strip() or None
 
         self._repo.save_workflow(workflow)
         if self._versions is not None:

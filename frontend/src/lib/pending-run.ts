@@ -1,7 +1,7 @@
 /** Persist a home-page run intent across /account sign-in (Files via IndexedDB). */
 
-const META_KEY = "agentflow_pending_run";
-const DB_NAME = "agentflow_pending_run";
+const META_KEY = "nexora_pending_run";
+const DB_NAME = "nexora_pending_run";
 const DB_VERSION = 1;
 const STORE = "files";
 

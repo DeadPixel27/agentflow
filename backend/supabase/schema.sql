@@ -1,4 +1,4 @@
--- AgentFlow schema — run in Supabase SQL Editor (Dashboard → SQL → New query)
+-- Nexora schema — run in Supabase SQL Editor (Dashboard → SQL → New query)
 
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
@@ -19,6 +19,7 @@ create table if not exists workflows (
     extraction_prompt text,
     default_email text,
     default_sheets_url text,
+    default_sheet_name text,
     created_at timestamptz not null default now()
 );
 
@@ -155,7 +156,7 @@ create table if not exists waitlist (
     id uuid primary key default gen_random_uuid(),
     email text not null,
     name text not null default '',
-    source text not null default 'pricing_page',
+    source text not null default 'normal',
     created_at timestamptz not null default now()
 );
 

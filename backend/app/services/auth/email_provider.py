@@ -25,15 +25,7 @@ class EmailAuthProvider:
 
         existing = self._repo.get_user_by_email(normalized)
         if existing is not None:
-            if name.strip() and name.strip() != existing.name:
-                updated = UserRecord(
-                    user_id=existing.user_id,
-                    name=name.strip(),
-                    email=existing.email,
-                    created_at=existing.created_at,
-                )
-                self._repo.save_user(updated)
-                return updated, False
+            # Keep the stored display name — users can rename via PATCH /api/users/me.
             return existing, False
 
         user = UserRecord(

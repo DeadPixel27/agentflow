@@ -1,6 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const AUTH_TOKEN_KEY = "agentflow_access_token";
+const AUTH_TOKEN_KEY = "nexora_access_token";
 
 export class ApiError extends Error {
   constructor(
@@ -26,13 +26,13 @@ export function clearAccessToken(): void {
 }
 
 /** Fired when a stored JWT is rejected so UI can open the sign-in dialog. */
-export const SESSION_EXPIRED_EVENT = "agentflow:session-expired";
+export const SESSION_EXPIRED_EVENT = "nexora:session-expired";
 
 function clearLocalSessionAndPromptSignIn(): void {
   clearAccessToken();
-  localStorage.removeItem("agentflow_user_id");
-  localStorage.removeItem("agentflow_user_name");
-  localStorage.removeItem("agentflow_user_email");
+  localStorage.removeItem("nexora_user_id");
+  localStorage.removeItem("nexora_user_name");
+  localStorage.removeItem("nexora_user_email");
   window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
 }
 
@@ -262,6 +262,7 @@ export interface WorkflowResponse {
   created_at: string | null;
   default_email?: string | null;
   default_sheets_url?: string | null;
+  default_sheet_name?: string | null;
 }
 
 export interface HealthResponse {
@@ -309,6 +310,14 @@ export async function createUser(name: string, email = ""): Promise<User> {
 
 export async function getUser(userId: string): Promise<User> {
   return request<User>(`/api/users/${userId}`);
+}
+
+export async function updateMyProfile(name: string): Promise<User> {
+  return request<User>("/api/users/me", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function getUserWorkflows(userId: string): Promise<WorkflowSummary[]> {
@@ -476,6 +485,7 @@ export interface WorkflowSettingsUpdate {
   description?: string;
   default_email?: string;
   default_sheets_url?: string;
+  default_sheet_name?: string;
 }
 
 export async function updateWorkflowSettings(
@@ -554,6 +564,67 @@ export async function pushToSheets(
   });
 }
 
+// --- Integrations / inbound ---
+
+export interface IntegrationsStatus {
+  email_configured: boolean;
+  sheets_configured: boolean;
+  sheets_share_email: string | null;
+  inbound_email_domain: string;
+}
+
+export async function getIntegrationsStatus(): Promise<IntegrationsStatus> {
+  return request<IntegrationsStatus>("/api/integrations");
+}
+
+export interface InboundAddress {
+  address_id: string;
+  full_address: string;
+  user_id: string;
+  workflow_id: string;
+  created_at?: string | null;
+}
+
+export async function listInboundAddresses(): Promise<InboundAddress[]> {
+  return request<InboundAddress[]>("/api/inbound-addresses");
+}
+
+export async function createInboundAddress(
+  workflowId: string,
+): Promise<InboundAddress> {
+  return request<InboundAddress>("/api/inbound-addresses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workflow_id: workflowId }),
+  });
+}
+
+export async function deleteInboundAddress(addressId: string): Promise<void> {
+  const headers = new Headers();
+  const token = getAccessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const res = await fetch(`${API_BASE}/api/inbound-addresses/${addressId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? JSON.stringify(body);
+    } catch {
+      // ignore
+    }
+    if (res.status === 401 && typeof window !== "undefined" && token) {
+      clearLocalSessionAndPromptSignIn();
+      throw new ApiError("Session expired. Please sign in again.", 401);
+    }
+    throw new ApiError(String(detail), res.status);
+  }
+}
+
 // --- Usage types ---
 
 export interface UsageSummary {
@@ -576,7 +647,7 @@ export interface WaitlistResponse {
 export async function joinWaitlist(
   email: string,
   name: string = "",
-  source: string = "pricing_page",
+  source: string = "normal",
 ): Promise<WaitlistResponse> {
   return request<WaitlistResponse>("/api/waitlist", {
     method: "POST",

@@ -2,7 +2,8 @@
 Usage metering — track and enforce page extraction limits.
 
 Free tier: 50 pages/month per user.
-Global daily cap: 500 pages/day across all users (budget protection).
+Global daily cap: 100 pages/day across all users (budget protection).
+OpenAI USD budget: estimated spend gate (see openai_cost / OPENAI_DAILY_BUDGET_USD).
 Refine limit: 10 refinements per run.
 Outbound: 20 emails / 20 Sheets pushes per user per month (separate from pages).
 """

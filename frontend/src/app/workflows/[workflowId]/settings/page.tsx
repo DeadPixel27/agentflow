@@ -1,11 +1,12 @@
 "use client";
 
-import { Copy, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
+import { SheetsShareHint } from "@/components/sheets-share-hint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 function AccountCard({
   title,
@@ -74,6 +76,7 @@ export default function WorkflowSettingsPage() {
       setDescription(wf.description);
       setEmailRecipient(wf.default_email ?? "");
       setSheetsUrl(wf.default_sheets_url ?? "");
+      setSheetName(wf.default_sheet_name?.trim() || "Results");
     } catch (e) {
       toastError(e instanceof ApiError ? e.message : "Failed to load settings.");
     } finally {
@@ -104,6 +107,7 @@ export default function WorkflowSettingsPage() {
       await updateWorkflowSettings(workflowId, {
         default_email: emailRecipient,
         default_sheets_url: sheetsUrl,
+        default_sheet_name: sheetName.trim() || "Results",
       });
       toastSuccess("Delivery settings updated.");
     } catch (e) {
@@ -127,16 +131,10 @@ export default function WorkflowSettingsPage() {
     }
   }
 
-  function copyInbound() {
-    const addr = `flow-${workflowId.slice(0, 6)}@ingest.agentflow.dev`;
-    void navigator.clipboard.writeText(addr);
-    toastSuccess("Copied forwarding address.");
-  }
-
   async function handleDelete() {
-    const name = workflow?.name ?? "this workflow";
+    const wfName = workflow?.name ?? "this workflow";
     const confirmed = window.confirm(
-      `Delete "${name}"? This cannot be undone. Past runs will remain but will no longer be linked to this workflow.`,
+      `Delete "${wfName}"? This cannot be undone. Past runs will remain but will no longer be linked to this workflow.`,
     );
     if (!confirmed) return;
 
@@ -196,11 +194,16 @@ export default function WorkflowSettingsPage() {
           <AccountCard title="Default Delivery">
             <p className="text-sm text-muted-foreground">
               When set, results are emailed and/or pushed to Sheets automatically
-              after every successful run of this workflow. You can still use
-              Export on a run to send to any other destination.
+              after every successful run. You can still use Export on any run for
+              a one-off send.
             </p>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email recipient</Label>
+              <p className="text-xs text-muted-foreground">
+                Nexora sends a results email from its own address (Resend).
+                No inbox sharing is required — just enter who should receive it.
+              </p>
               <Input
                 id="email"
                 value={emailRecipient}
@@ -208,42 +211,74 @@ export default function WorkflowSettingsPage() {
                 placeholder="team@company.com"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sheets">Google Sheets URL</Label>
-              <Input
-                id="sheets"
-                value={sheetsUrl}
-                onChange={(e) => setSheetsUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-              />
+
+            <div className="space-y-3 border-t pt-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Google Sheets</p>
+                <p className="text-xs text-muted-foreground">
+                  Nexora writes with a Google service account. You must grant
+                  that account Editor access on the spreadsheet first.
+                </p>
+              </div>
+              <SheetsShareHint />
+              <div className="space-y-2">
+                <Label htmlFor="sheets">Spreadsheet URL</Label>
+                <Input
+                  id="sheets"
+                  value={sheetsUrl}
+                  onChange={(e) => setSheetsUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sheet-name">Sheet / tab name</Label>
+                <p className="text-xs text-muted-foreground">
+                  Nexora appends rows to this tab and creates it if it doesn&apos;t
+                  exist.
+                </p>
+                <Input
+                  id="sheet-name"
+                  value={sheetName}
+                  onChange={(e) => setSheetName(e.target.value)}
+                  placeholder="Results"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sheet">Sheet name</Label>
-              <Input
-                id="sheet"
-                value={sheetName}
-                onChange={(e) => setSheetName(e.target.value)}
-              />
-            </div>
+
             <Button onClick={() => void handleSaveDelivery()} disabled={saving}>
               Update
             </Button>
           </AccountCard>
 
           <AccountCard title="Inbound Email">
-            <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 space-y-2">
-              <p className="text-xs text-blue-900">
-                Forward documents to this address to trigger this workflow.
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Imagine forwarding an invoice from your inbox and watching this
+              workflow extract the fields — no upload UI required.
+            </p>
+            <div className="rounded-lg border bg-muted/40 px-4 py-3 space-y-2 text-sm text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">How it will work:</span>{" "}
+                each workflow gets a private address like{" "}
+                <code className="text-xs">flow-••••@ingest.nexora.app</code>. You
+                email or forward PDFs, PNGs, or JPGs to it; Nexora starts a run
+                and can email results or push them to Sheets using Default Delivery
+                above.
               </p>
-              <div className="flex items-center gap-2">
-                <code className="text-xs flex-1 truncate">
-                  flow-{workflowId.slice(0, 6)}@ingest.agentflow.dev
-                </code>
-                <Button variant="outline" size="sm" onClick={copyInbound}>
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+              <p>
+                <span className="font-medium text-foreground">Coming with Pro:</span>{" "}
+                unique addresses, attachment intake, and the same extraction
+                quality you get from upload today. We&apos;re collecting interest
+                before turning it on.
+              </p>
             </div>
+            <Link
+              href={pricingHref(WAITLIST_SOURCES.inboundEmail)}
+              className="inline-flex"
+            >
+              <Button type="button" className="w-full sm:w-auto">
+                Join Pro waitlist for inbound email
+              </Button>
+            </Link>
           </AccountCard>
 
           <AccountCard title="Versions">

@@ -1,4 +1,4 @@
-# AgentFlow — Deployment & Secrets
+# Nexora — Deployment & Secrets
 
 How we run production: hosts, where env vars live, and the ship checklist.
 
@@ -92,12 +92,39 @@ Optional / feature flags:
 | Variable | When |
 |----------|------|
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Outbound email delivery |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Sheets export |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Sheets export — users must share each spreadsheet with the JSON `client_email` as Editor (shown in Workflow Settings via `GET /api/integrations`) |
 | `INBOUND_EMAIL_DOMAIN` / `INBOUND_WEBHOOK_SECRET` | Mailgun inbound — empty secret **rejects** all webhooks |
 | `ADMIN_API_KEY` | Admin header routes |
 | Rate limits / page caps | Defaults in `.env.example` are fine to start |
 
 Full cheat sheet: [ARCHITECTURE.md §10](./ARCHITECTURE.md#10-keys--config-cheat-sheet).
+
+---
+
+## Rebrand / new cloud projects (Nexora)
+
+You will eventually recreate vendor accounts under the **Nexora** name (new Google Cloud project, Supabase project, OAuth client, Resend domain, Mailgun domain). Until then, **current AgentFlow-named credentials are fine for local testing** — do not block ship work on renaming.
+
+When you cut over:
+
+1. **Google Cloud** — new project → OAuth Web client (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID`) + Sheets service account JSON (`GOOGLE_SERVICE_ACCOUNT_JSON`). Update Railway/Vercel + local `.env`. Users must re-share spreadsheets with the **new** `client_email` as Editor.
+2. **Supabase** — new project → run schema/migrations + private buckets → swap `SUPABASE_URL` / `SUPABASE_SECRET_KEY` (and bucket names if changed).
+3. **Resend** — new API key + verified sending domain (`RESEND_API_KEY` / `RESEND_FROM_EMAIL`).
+4. **Mailgun (inbound)** — new receiving domain + webhook signing key (`INBOUND_EMAIL_DOMAIN` / `INBOUND_WEBHOOK_SECRET`) pointed at `POST /api/inbound/email`.
+5. Smoke: `/api/health`, `/api/integrations` (shows Sheets share email), Google sign-in, one email send, one Sheets push, one inbound attachment if enabled.
+
+### Integrations setup time & cost (ballpark)
+
+| Piece | First-time setup | Ongoing cost (launch scale) |
+|-------|------------------|-----------------------------|
+| Google Sheets service account | ~15–30 min (create SA, enable Sheets API, download JSON, set env, restart) | **$0** — SA + Sheets API free for this use |
+| Google OAuth (sign-in) | ~30–60 min (OAuth client, authorized origins) | **$0** |
+| Resend outbound | ~30–60 min (account, API key; custom domain DNS longer) | **Free:** 3k emails/mo (100/day). Paid from ~$20/mo |
+| Mailgun inbound | ~1–2 h (domain DNS MX/TXT, route → webhook, secret) | Often **pay-as-you-go** (no lasting free tier); small launch volume is low single-digit $/mo |
+| Supabase project swap | ~1–2 h (schema, buckets, keys, migrate data if any) | Free tier usually enough early; paid when DB/storage grows |
+| Full Nexora rebrand cutover (all of the above) | **~½–1 day** focused | Dominated by LLM spend (OpenAI/Groq), not Sheets/email |
+
+**For testing now:** keep existing JSON path in `backend/.env`; restart API; Workflow Settings should show the share-as-Editor email from `/api/integrations`. No per-user JSON upload.
 
 ---
 

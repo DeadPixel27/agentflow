@@ -39,6 +39,7 @@ def _workflow(**kwargs) -> MagicMock:
     workflow = MagicMock()
     workflow.default_email = kwargs.get("default_email")
     workflow.default_sheets_url = kwargs.get("default_sheets_url")
+    workflow.default_sheet_name = kwargs.get("default_sheet_name")
     return workflow
 
 
@@ -143,6 +144,43 @@ async def test_deliver_pushes_when_default_sheets_url_set():
     push.assert_awaited_once()
     assert push.await_args.args[0].endswith("/abc")
     assert push.await_args.kwargs["sheet_name"] == "Results"
+
+
+@pytest.mark.asyncio
+async def test_deliver_uses_custom_default_sheet_name():
+    mock_result = SheetsPushResult(
+        spreadsheet_id="ssid",
+        sheet_name="Invoices",
+        rows_written=1,
+    )
+
+    with (
+        patch(
+            "app.services.email.workflow_delivery.get_workflow",
+            return_value=_workflow(
+                default_sheets_url="https://docs.google.com/spreadsheets/d/abc",
+                default_sheet_name="Invoices",
+            ),
+        ),
+        patch(
+            "app.services.email.workflow_delivery.send_results_email",
+            new_callable=AsyncMock,
+        ) as send,
+        patch(
+            "app.services.email.workflow_delivery.push_rows_to_sheet",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ) as push,
+        patch(
+            "app.services.analytics.events.log_event",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await deliver_workflow_defaults(_run(), [{"vendor": "Acme"}])
+
+    send.assert_not_called()
+    push.assert_awaited_once()
+    assert push.await_args.kwargs["sheet_name"] == "Invoices"
 
 
 @pytest.mark.asyncio

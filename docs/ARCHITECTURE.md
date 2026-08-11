@@ -1,10 +1,10 @@
-# AgentFlow — System Architecture (Study Guide)
+# Nexora — System Architecture (Study Guide)
 
 **Interview-ready source of truth** for how this product works: data model, auth, storage, APIs, keys, and the code to open when explaining a flow.
 
 | | |
 |---|---|
-| **Product** | AgentFlow (Document Processor) — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
+| **Product** | Nexora (Document Processor) — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
@@ -41,7 +41,7 @@
 
 **Auth gate (important product decision):**
 
-- **Public:** browse template catalog, health, waitlist, sign-in endpoints.
+- **Public:** browse template catalog, health, integrations status, waitlist, sign-in endpoints.
 - **Protected:** upload, run, refine, workflows, usage — require app JWT.
 - Unsigned users can select files + template on home; hitting Run opens a **centered sign-in dialog**. After sign-in, pending docs resume automatically (blur overlay → results page). No anonymous LLM spend → metering and telemetry always attach to a `user_id`.
 
@@ -173,8 +173,8 @@ sequenceDiagram
 
 1. User selects files/template on home, clicks Run → `ensureUser()` throws `SignInRequiredError`.
 2. Frontend `savePendingRun({ kind, files, templateId, task })`:
-   - **Metadata** → `sessionStorage` key `agentflow_pending_run`
-   - **File bytes** → IndexedDB DB `agentflow_pending_run`
+   - **Metadata** → `sessionStorage` key `nexora_pending_run`
+   - **File bytes** → IndexedDB DB `nexora_pending_run`
 3. `SignInProvider` opens modal (no navigation to `/account`).
 4. On success: if `hasPendingRun()`, show **ProcessingOverlay**, `resumePendingRun()` uploads + starts run, `router.push(/results/{run_id})`.
 5. If no pending intent (nav Sign in only): close modal, **stay on current page**.
@@ -317,7 +317,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | **Purpose** | Saved reusable pipelines |
 | **PK** | `id` |
 | **FK** | `user_id` → `users` CASCADE |
-| **Notable** | `parent_template_id`, `current_template_version_id`, `extraction_prompt`, `default_email`, `default_sheets_url`, `task_description`, `source` |
+| **Notable** | `parent_template_id`, `current_template_version_id`, `extraction_prompt`, `default_email`, `default_sheets_url`, `default_sheet_name`, `task_description`, `source` |
 | **Indexes** | `idx_workflows_user_id` |
 
 #### `workflow_steps`
@@ -385,7 +385,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 #### `waitlist`
 | | |
 |---|---|
-| **Purpose** | Pro interest from pricing page |
+| **Purpose** | Pro interest — `source` attribution: `normal`, `pages_exhausted`, `inbound_email` |
 | **Unique** | `email` — **no FK** to users |
 
 #### `analytics_events`
@@ -409,6 +409,9 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | 009 | `default_email`, `default_sheets_url` |
 | 010 | `usage_events`, `waitlist`, `analytics_events`, `users.is_admin` |
 | 011 | `workflow_runs.user_id` + backfill |
+| 012 | `uploads` registry |
+| 013 | private storage policies |
+| 014 | `workflows.default_sheet_name` |
 
 ---
 
@@ -491,7 +494,7 @@ sequenceDiagram
   API->>DB: upsert user by email
   API->>API: create_access_token sub email
   API-->>FE: app JWT + user
-  FE->>FE: localStorage agentflow_access_token
+  FE->>FE: localStorage nexora_access_token
   FE->>API: Authorization Bearer on API calls
 ```
 
@@ -521,12 +524,12 @@ sequenceDiagram
 
 | localStorage key | Content |
 |------------------|---------|
-| `agentflow_access_token` | App JWT |
-| `agentflow_user_id` | uuid |
-| `agentflow_user_name` | display name |
-| `agentflow_user_email` | email |
+| `nexora_access_token` | App JWT |
+| `nexora_user_id` | uuid |
+| `nexora_user_name` | display name |
+| `nexora_user_email` | email |
 
-On 401 with a sent token: clear session, dispatch `agentflow:session-expired` → `SignInProvider` opens dialog (`api.ts` + `use-sign-in.tsx`).
+On 401 with a sent token: clear session, dispatch `nexora:session-expired` → `SignInProvider` opens dialog (`api.ts` + `use-sign-in.tsx`).
 
 ### 7.4 Ownership
 
@@ -546,7 +549,8 @@ On 401 with a sent token: clear session, dispatch `agentflow:session-expired` �
 |-----|-------------|------|---------|
 | Monthly pages / user | `FREE_PAGE_LIMIT_MONTHLY=50` | **429** | Sum of `usage_events.pages` this month |
 | Refines / run lineage | `MAX_REFINES_PER_RUN=10` | **429** | Count refine children |
-| Global pages / day | `GLOBAL_DAILY_PAGE_LIMIT=500` | **503** | Budget protection across all users |
+| Global pages / day | `GLOBAL_DAILY_PAGE_LIMIT=100` | **503** | Budget protection across all users |
+| OpenAI $ / day (est.) | `OPENAI_DAILY_BUDGET_USD=1.0` | fail extract | Token-based estimate; `0` disables |
 | Adhoc/template/refine rate | `RATE_LIMIT_RUNS_ADHOC=10/minute` | 429 slowapi | Abuse throttle |
 | Upload rate | `RATE_LIMIT_UPLOAD=20/minute` | 429 slowapi | |
 
@@ -571,15 +575,17 @@ Frontend: `UsageLimitModal` on 429; toast on 503.
 
 - Key: `GOOGLE_SERVICE_ACCOUNT_JSON` (path or raw JSON)
 - Manual: `POST /api/runs/{run_id}/sheets`
-- Auto: workflow `default_sheets_url`
+- Auto: workflow `default_sheets_url` + optional `default_sheet_name` (defaults to `Results`)
 - Agent: `output.google_sheets`
+- **User setup:** share the spreadsheet with the service account `client_email` as **Editor**. UI exposes that address via `GET /api/integrations` (`sheets_share_email`) and shows a walkthrough on Workflow Settings + the Sheets export modal.
 
 ### Inbound email (Mailgun)
 
-- `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.agentflow.app`)
+- `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.nexora.app`)
 - `INBOUND_WEBHOOK_SECRET` — HMAC verify; empty secret rejects webhooks
-- User creates address → row in `inbound_addresses` (`flow-{hex}@domain`)
+- **User setup (launch UI):** Workflow Settings explains inbound as a Pro feature and CTAs to `/pricing?source=inbound_email` (waitlist attribution). Creating live addresses is deferred until Pro/Mailgun go live; backend CRUD + webhook remain.
 - Mailgun `POST /api/inbound/email` → save attachments → start that workflow’s run
+- Settings page lists steps: create address → email/forward with PDF/PNG/JPG attachments
 
 ---
 
@@ -613,9 +619,11 @@ Frontend: `UsageLimitModal` on 429; toast on 503.
 | `AWS_S3_BUCKET` / `REGION` / `PREFIX` | S3 templates | optional |
 | `UPLOAD_DIR` | Local uploads path | `uploads` |
 | `MAX_UPLOAD_SIZE_MB` | | `10` |
+| `MAX_PAGES_PER_FILE` | | `10` |
 | `FREE_PAGE_LIMIT_MONTHLY` | | `50` |
 | `MAX_REFINES_PER_RUN` | | `10` |
-| `GLOBAL_DAILY_PAGE_LIMIT` | | `500` |
+| `GLOBAL_DAILY_PAGE_LIMIT` | | `100` |
+| `OPENAI_DAILY_BUDGET_USD` | | `1.0` (`0` = off) |
 | `OCR_ENGINE` | `rapidocr` \| `tesseract` | `rapidocr` |
 | `USE_LAYOUT_PRESERVATION` | Docling for digital PDFs | `true` |
 | `CORS_ORIGINS` | Comma-separated | `http://localhost:3000` |
@@ -623,7 +631,7 @@ Frontend: `UsageLimitModal` on 429; toast on 503.
 | `RATE_LIMIT_UPLOAD` | | `20/minute` |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Email | optional |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Sheets | optional |
-| `INBOUND_EMAIL_DOMAIN` | | `ingest.agentflow.app` |
+| `INBOUND_EMAIL_DOMAIN` | | `ingest.nexora.app` |
 | `INBOUND_WEBHOOK_SECRET` | Mailgun signing | required if inbound on |
 | `ADMIN_API_KEY` | `X-Admin-Key` header | optional |
 
@@ -637,6 +645,7 @@ Hardcoded in settings: `allowed_extensions` = `{.pdf,.png,.jpg,.jpeg}`.
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | GIS button; must match backend `GOOGLE_CLIENT_ID` |
 | `NEXT_PUBLIC_AUTH_ALLOW_EMAIL` | Show email form in sign-in UI |
 | `NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB` | Client-side size check (default 10) |
+| `NEXT_PUBLIC_MAX_PAGES_PER_FILE` | Client-side page check (default 10; server enforces) |
 
 ---
 

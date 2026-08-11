@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     # Max file size per upload (in megabytes)
     max_upload_size_mb: int = 10
+    # Max PDF pages per file (images count as 1). Soft product guard for
+    # single-call GPT-4o extract quality; raise when chunked extract ships.
+    max_pages_per_file: int = 10
 
     # File types we accept
     allowed_extensions: set[str] = {".pdf", ".png", ".jpg", ".jpeg"}
@@ -62,7 +65,12 @@ class Settings(BaseSettings):
     # Usage limits
     free_page_limit_monthly: int = 50
     max_refines_per_run: int = 10
-    global_daily_page_limit: int = 500
+    # Global page brake across all users (UTC day). Keep low while OpenAI
+    # credit balance is small — 100 pages ≈ ~$1 at typical extract cost.
+    global_daily_page_limit: int = 100
+    # Soft OpenAI USD budget (estimated from token usage). 0 = disabled.
+    # With ~$5 credit, $1/day keeps the balance alive ~5 full days of burn.
+    openai_daily_budget_usd: float = 1.0
     # Outbound free-tier units (separate from page pool)
     free_email_limit_monthly: int = 20
     free_sheets_limit_monthly: int = 20
@@ -115,7 +123,7 @@ class Settings(BaseSettings):
     google_service_account_json: str = ""
 
     # Inbound email (Mailgun webhook)
-    inbound_email_domain: str = "ingest.agentflow.app"
+    inbound_email_domain: str = "ingest.nexora.app"
     inbound_webhook_secret: str = ""
     # Reject webhooks whose timestamp is older/newer than this many seconds
     inbound_webhook_max_age_seconds: int = 300

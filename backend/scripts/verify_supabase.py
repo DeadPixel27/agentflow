@@ -78,7 +78,7 @@ def _verify_private_buckets(client) -> list[str]:
 
 
 def main() -> int:
-    print("AgentFlow — Supabase verification\n")
+    print("Nexora — Supabase verification\n")
 
     if not is_supabase_configured():
         print("FAIL: Supabase not configured.")

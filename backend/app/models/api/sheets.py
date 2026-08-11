@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class SheetsPushRequest(BaseModel):
     spreadsheet_url: str = Field(validation_alias="url")
-    sheet_name: str = "AgentFlow Results"
+    sheet_name: str = "Nexora Results"
 
     model_config = {"populate_by_name": True}
 

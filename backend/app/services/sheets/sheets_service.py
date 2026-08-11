@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -14,20 +14,58 @@ logger = logging.getLogger("sheets")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+_SHARE_HINT = (
+    "Share the spreadsheet with Nexora as Editor "
+    "(use the service account email from Workflow Settings)."
+)
 
-def _get_service():
+
+def _load_service_account_info() -> dict[str, Any]:
     creds_json = settings.google_service_account_json
     if not creds_json:
         raise SheetsError("GOOGLE_SERVICE_ACCOUNT_JSON not configured")
 
     if creds_json.startswith("{"):
-        info = json.loads(creds_json)
-    else:
-        with open(creds_json) as file:
-            info = json.load(file)
+        return json.loads(creds_json)
 
+    with open(creds_json) as file:
+        return json.load(file)
+
+
+def get_sheets_share_email() -> Optional[str]:
+    """Return the service-account email users must share sheets with as Editor."""
+    if not settings.google_service_account_json:
+        return None
+    try:
+        info = _load_service_account_info()
+    except Exception:
+        logger.exception("Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON")
+        return None
+    email = info.get("client_email")
+    return email.strip() if isinstance(email, str) and email.strip() else None
+
+
+def _get_service():
+    info = _load_service_account_info()
     creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     return build("sheets", "v4", credentials=creds)
+
+
+def _friendly_sheets_error(exc: Exception) -> str:
+    message = str(exc)
+    lowered = message.lower()
+    if any(
+        token in lowered
+        for token in (
+            "permission",
+            "forbidden",
+            "access",
+            "403",
+            "the caller does not have permission",
+        )
+    ):
+        return f"Failed to push to Google Sheets: {message}. {_SHARE_HINT}"
+    return f"Failed to push to Google Sheets: {message}"
 
 
 def _extract_sheet_id(url_or_id: str) -> str:
@@ -47,7 +85,7 @@ def _a1_range(sheet_name: str, cell: str = "A1") -> str:
 async def push_rows_to_sheet(
     spreadsheet_url: str,
     rows: list[dict[str, Any]],
-    sheet_name: str = "AgentFlow Results",
+    sheet_name: str = "Nexora Results",
 ) -> SheetsPushResult:
     if not rows:
         raise SheetsError("No rows to push")
@@ -122,4 +160,4 @@ async def push_rows_to_sheet(
         raise
     except Exception as exc:
         logger.error("Sheets push failed: %s", str(exc))
-        raise SheetsError(f"Failed to push to Google Sheets: {exc}") from exc
+        raise SheetsError(_friendly_sheets_error(exc)) from exc

@@ -39,7 +39,7 @@ done
 
 home=$(curl -s "$WEB/")
 echo "$home" | grep -q "any document" && ok "Home has V2 hero" || bad "Home missing V2 hero"
-echo "$home" | grep -q "AgentFlow" && ok "Home has AgentFlow branding" || bad "Home missing branding"
+echo "$home" | grep -q "Nexora" && ok "Home has Nexora branding" || bad "Home missing branding"
 echo "$home" | grep -q "How it works" && bad "Home still has old 'How it works'" || ok "Home removed old sections"
 
 account=$(curl -s "$WEB/account")

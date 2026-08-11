@@ -36,6 +36,7 @@ class WorkflowResponse(BaseModel):
     created_at: Optional[str] = None
     default_email: Optional[str] = None
     default_sheets_url: Optional[str] = None
+    default_sheet_name: Optional[str] = None
 
 
 class WorkflowSummaryResponse(BaseModel):
@@ -77,3 +78,4 @@ class WorkflowSettingsUpdateRequest(BaseModel):
     description: Optional[str] = None
     default_email: Optional[str] = None
     default_sheets_url: Optional[str] = None
+    default_sheet_name: Optional[str] = None

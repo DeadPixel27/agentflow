@@ -1,9 +1,11 @@
-# AgentFlow — Scaling, Jobs & Future Ops
+# Nexora — Scaling, Jobs & Future Ops
 
 **Updated:** 2026-08-11  
 **Audience:** when you outgrow a single Railway API process + in-process `BackgroundTasks`.
 
 This doc captures decisions from the launch hardening review so we do **not** reopen them casually during ship week. For near-term product tasks see [NEXT-STEPS.md](./NEXT-STEPS.md).
+
+**Rule:** Whenever we defer a scaling, reliability, cost, extraction-architecture, or ops change, **add it here in the same PR/change** (see `.cursor/rules/scaling-and-jobs.mdc`). Do not leave “we’ll do it later” only in chat.
 
 ---
 
@@ -26,6 +28,8 @@ If the process dies (redeploy, crash, restart), the intern is gone but the stick
 | **No Redis / no worker service yet** | Avoid extra monthly cost until load or multi-replica needs it |
 | **Orphan reclaim** | Users are not stuck forever; pages refunded; job is **not** auto-retried (user can re-run) |
 | **No extraction parallelism yet** | Batch LLM call is simpler/cheaper; parallel OCR/LLM adds cost and failure complexity |
+| **Max 10 pages per file** | Single GPT-4o call over full joined text; hard reject over-limit PDFs (UI warns). Raise when chunked extract ships (`MAX_PAGES_PER_FILE`) |
+| **OpenAI spend brakes** | Global daily pages + estimated `OPENAI_DAILY_BUDGET_USD` (in-process) while credit balance is small |
 
 Rough capacity on this posture: a handful of concurrent heavy runs, product caps (pages/day, rate limits) usually bite before the box does. Fine for early launch traffic; not for “hundreds extracting at once.”
 
@@ -75,6 +79,36 @@ User → API replica A or B or N
 
 ---
 
+## Later: long-document / chunked extraction
+
+**Current behavior (launch):**
+
+- PDF text: page-by-page extract → **join into one string**.
+- Field extract: **one** GPT-4o call with the full document text (whole upload batch in one prompt).
+- Metering: bill by PDF page count; LLM sees one concatenated blob.
+- Guardrail: **`MAX_PAGES_PER_FILE=10`** — reject over-limit files (HTTP upload + inbound). Frontend shows the limit and rejects when page count is detectable.
+
+**When to change (measured pain):**
+
+| Symptom | Direction |
+|---------|-----------|
+| Missed mid-doc fields / truncated line items on 8–10 page tables | Chunk by page or section |
+| Context / token errors on dense PDFs | Chunk + merge |
+| Latency on multi-file batches | Parallel OCR first; then capped parallel LLM |
+| Users need 20–50 page contracts | Raise page cap **only after** chunked extract ships |
+
+**Preferred chunk design (when we build it):**
+
+1. Split text by page (or ~N pages / ~token budget) with overlap for headers.
+2. Parallel GPT-4o calls **with a hard concurrency cap** (not unbounded `gather`).
+3. Reconcile: header fields from page 1 / highest-confidence; **merge arrays** (line items) and dedupe.
+4. Metering stays page-based; log OpenAI `$` per chunk via existing usage estimate.
+5. Then raise `MAX_PAGES_PER_FILE` (e.g. 25–50) and update UI copy.
+
+Do **not** ship unbounded parallel LLM for launch. Do **not** remove the per-file page cap until reconcile exists.
+
+---
+
 ## Later: extraction parallelism (only if measured)
 
 Current behavior:
@@ -86,11 +120,22 @@ Current behavior:
 Prefer, in order, when multi-file uploads feel slow:
 
 1. Measure (OCR vs LLM vs network).
-2. **Chunked batches** (e.g. N docs per LLM call) if context/size hurts.
+2. **Chunked batches** (e.g. N docs per LLM call) if context/size hurts — see long-document section above.
 3. Parallel OCR across docs if OCR is the bottleneck (watch CPU on one box).
 4. Parallel per-doc LLM only with clear caps — more $$, rate limits, partial failure, metering races.
 
 Do **not** add unbounded `asyncio.gather` over LLM calls for launch.
+
+---
+
+## Later: cost & metering ops
+
+| Item | Notes |
+|------|--------|
+| Persist OpenAI spend beyond one API process | Today `openai_cost` day totals are **in-process**; multi-replica needs Redis/DB |
+| Admin `/api/admin/openai-spend` | Snapshot only for the replica that handled calls |
+| Route simple templates to `gpt-4o-mini` | Big $/page win once quality is validated |
+| Upload TTL cleanup sweep | Storage cost / privacy (also in NEXT-STEPS deferred) |
 
 ---
 
@@ -118,7 +163,12 @@ Add Redis + workers when any of these become true:
 
 - You want **more than one** API replica / autoscaling.
 - Redeploys are frequent and **re-running failed orphan jobs** is painful for users.
-- Concurrent extractions saturate the single process (queue backs up in practice).
+- Concurrent extracts saturate the single process (queue backs up in practice).
 - You need retries, delayed jobs, or priority queues.
 
-Until then: one replica, BackgroundTasks, orphan reclaim, product caps.
+Raise per-file page limits / add chunked extract when:
+
+- Real users hit the **10-page** reject often with valid use cases.
+- Accuracy on dense multi-page tables is measurably bad under single-call extract.
+
+Until then: one replica, BackgroundTasks, orphan reclaim, product caps, 10 pages/file.

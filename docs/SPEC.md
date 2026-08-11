@@ -1,4 +1,4 @@
-# AgentFlow - Project Spec
+# Nexora - Project Spec
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
@@ -108,7 +108,7 @@ Step 4: Formatter (output: CSV with flag column)
 | **User template versions** | Supabase Storage `user-templates` + Postgres index | Workflow versions; refine does not create versions | ✅ Done |
 | **Email delivery** | Resend API | `output.email` agent + `POST /api/runs/{id}/email` | ✅ Done |
 | **Google Sheets** | Service account JSON | `output.google_sheets` agent + `POST /api/runs/{id}/sheets` | ✅ Done |
-| **Inbound email** | Mailgun webhook | Forward to `*@ingest.agentflow.app` → auto-run workflow | ✅ Done |
+| **Inbound email** | Mailgun webhook | Forward to `*@ingest.nexora.app` → auto-run workflow | ✅ Done |
 | **Code** | GitHub (public repo) | Recruiters will see this | ✅ [DeadPixel27/agentflow](https://github.com/DeadPixel27/agentflow) |
 
 ---
@@ -289,7 +289,7 @@ See [docs/ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) for coding rul
 | `pipeline_templates` | Editable task presets (landing page; not user workflows) |
 | `user_template_versions` | Metadata index for **workflow** template versions |
 | `refinement_events` | User refine messages (owner aggregation) |
-| `inbound_addresses` | Unique `flow-*@ingest.agentflow.app` → workflow mapping |
+| `inbound_addresses` | Unique `flow-*@ingest.nexora.app` → workflow mapping |
 
 Document files are stored in **Supabase Storage** (`Documents` bucket), not in Postgres.
 
@@ -316,7 +316,7 @@ RESEND_FROM_EMAIL=onboarding@resend.dev
 GOOGLE_SERVICE_ACCOUNT_JSON=
 
 # V2 inbound email (optional)
-INBOUND_EMAIL_DOMAIN=ingest.agentflow.app
+INBOUND_EMAIL_DOMAIN=ingest.nexora.app
 INBOUND_WEBHOOK_SECRET=
 ```
 
@@ -399,7 +399,9 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 ### V2 polish (optional, pre-deploy)
 
 - [ ] Inbound webhook: email results back to sender when run completes
-- [ ] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder)
+- [x] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder) — **superseded for launch:** inbound gated behind Pro waitlist (`/pricing?source=inbound_email`); backend CRUD kept
+- [x] Sheets/email setup walkthrough in Workflow Settings + Sheets modal (`GET /api/integrations` exposes share-as-Editor email)
+- [x] Waitlist `source` telemetry: `normal` | `pages_exhausted` | `inbound_email`
 - [ ] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing
 
 ---

@@ -45,7 +45,7 @@ def _form(*, token: str = "tok-1", timestamp: str | None = None, signature: str 
         "token": token,
         "timestamp": ts,
         "signature": sig,
-        "recipient": "flow-abc@ingest.agentflow.app",
+        "recipient": "flow-abc@ingest.nexora.app",
         "sender": "sender@example.com",
     }
 

@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from app.api.dependencies import InboundEmailServiceDep, WorkflowServiceDep
 from app.api.usage_http import charge_run_pages_or_abandon, enforce_upload_usage
 from app.config import settings
+from app.models.domain.document import InvalidUploadError
 from app.models.domain.email import InboundAddressNotFoundError
 from app.rate_limit import limiter
 from app.services.documents.upload_loader import UploadNotFoundError
@@ -92,7 +93,7 @@ async def receive_inbound_email(
     inbound: InboundEmailServiceDep,
     workflows: WorkflowServiceDep,
 ):
-    """Mailgun posts here when email arrives at *@ingest.agentflow.app."""
+    """Mailgun posts here when email arrives at *@ingest.nexora.app."""
     form = await request.form()
     token = str(form.get("token", ""))
     timestamp = str(form.get("timestamp", ""))
@@ -136,5 +137,10 @@ async def receive_inbound_email(
         return {"status": "processing", "run_id": run.run_id}
     except InboundAddressNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (WorkflowNotFoundError, UploadNotFoundError, ValueError) as exc:
+    except (
+        WorkflowNotFoundError,
+        UploadNotFoundError,
+        ValueError,
+        InvalidUploadError,
+    ) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

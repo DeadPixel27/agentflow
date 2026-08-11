@@ -259,6 +259,7 @@ class SupabaseRepository:
                 "extraction_prompt": persist_workflow.extraction_prompt,
                 "default_email": persist_workflow.default_email,
                 "default_sheets_url": persist_workflow.default_sheets_url,
+                "default_sheet_name": persist_workflow.default_sheet_name,
             }
         ).execute()
 
@@ -323,6 +324,7 @@ class SupabaseRepository:
             created_at=row.get("created_at"),
             default_email=row.get("default_email"),
             default_sheets_url=row.get("default_sheets_url"),
+            default_sheet_name=row.get("default_sheet_name"),
         )
 
     def list_workflows(self, user_id: Optional[str] = None) -> list[WorkflowSummary]:
