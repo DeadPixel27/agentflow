@@ -17,7 +17,7 @@ async def list_templates(
     templates: TemplateServiceDep,
     category: Optional[str] = Query(default=None, description="Filter by category"),
 ) -> TemplateListResponse:
-    """List active pipeline templates (from database)."""
+    """List active pipeline templates (public catalog)."""
     items = templates.list_templates(category=category)
     responses: list[TemplateSummaryResponse] = [
         to_template_summary(item) for item in items
@@ -30,7 +30,7 @@ async def get_template(
     template_id: str,
     templates: TemplateServiceDep,
 ) -> TemplateResponse:
-    """Get one template by id."""
+    """Get one template by id (public catalog)."""
     try:
         return to_template_response(templates.get_template(template_id))
     except TemplateNotFoundError as e:

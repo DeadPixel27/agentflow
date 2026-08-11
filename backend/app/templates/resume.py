@@ -31,8 +31,14 @@ RESUME_TEMPLATE = PipelineTemplate(
     extraction_instructions=(
         "For work_experience, return array of objects: "
         "{company, title, start_date, end_date, description}. "
-        "end_date should be 'Present' if currently employed. "
-        "years_of_experience should be a number calculated from earliest work start date. "
+        "Use ISO dates when possible (YYYY-MM-DD); end_date should be 'Present' if currently employed. "
+        "years_of_experience: sum the duration of EVERY role in work_experience "
+        "(including internships), as fractional years rounded to 2 decimals. "
+        "For each role: duration_years = (end_date - start_date) / 365.25; "
+        "if end_date is Present/current, use today's date. "
+        "Add all role durations together — do NOT use calendar span from earliest start "
+        "to latest end (that over-counts gaps), and do NOT use education dates. "
+        "Example: July 2024–Present (~2.08y) + May 2023–Aug 2023 (~0.25y) ≈ 2.33. "
         "technical_skills and soft_skills should be arrays of strings. "
         "certifications should be an array of strings."
     ),

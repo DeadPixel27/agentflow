@@ -8,7 +8,12 @@ class SignInRequest(BaseModel):
     email: str = Field(min_length=3)
 
 
+class GoogleSignInRequest(BaseModel):
+    id_token: str = Field(min_length=1)
+
+
 class SignInResponse(BaseModel):
     user: UserResponse
     is_new_user: bool
     auth_provider: str
+    token: str

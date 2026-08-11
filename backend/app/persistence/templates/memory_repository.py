@@ -30,3 +30,7 @@ class MemoryTemplateRepository:
 
     def get_template(self, template_id: str) -> Optional[PipelineTemplate]:
         return self._templates.get(template_id)
+
+    def save_template(self, template: PipelineTemplate) -> PipelineTemplate:
+        self._templates[template.template_id] = template
+        return template

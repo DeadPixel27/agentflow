@@ -2,9 +2,9 @@
 
 **One-liner:** Describe what you want done with your documents -> system builds and runs an AI agent pipeline automatically.
 
-> **Progress snapshot (2026-08-06):** **Merged to `main` and `develop`** (`800cc03`). MVP + pre-deploy hardening + template library shipped. **38 backend tests passing.** Templates in `backend/app/templates/`; `POST /api/runs/template` runs optimized pipelines. Supabase configured (`pipeline_templates` seeded). **Next: deploy to Railway + Vercel.**
+> **Progress snapshot (2026-08-08):** MVP through **V1.3** + **Frontend V2** + **Backend V2** shipped on `develop` (`c164ccf`, `dfef3a7`). Full-stack API parity: email/Sheets export, workflow PATCH/settings, inbound addresses, workflow-only versioning. Frontend `api.ts` aligned with backend (no dead run-version client calls). **66 backend tests** · E2E smoke **32 passed**. See [ARCHITECTURE.md](./ARCHITECTURE.md), [docs/FRONTEND-V2-PLAN.md](./docs/FRONTEND-V2-PLAN.md), [docs/BACKEND-V2-PLAN.md](./docs/BACKEND-V2-PLAN.md).
 
-**Central tracker:** Use the [Master Tracker](#master-tracker) below. Extended planning notes live in local `docs/` (gitignored, not on GitHub).
+**Documentation:** All markdown lives in repo root, `docs/`, and `backend/` — see [docs/README.md](./docs/README.md). Screenshot JPEGs under `docs/_archive/source-screenshots/` are gitignored.
 
 ---
 
@@ -32,9 +32,16 @@
 - [x] Results view: structured table + download CSV/JSON
 - [x] Pipeline history: expandable run history per workflow (input docs + output)
 - [x] Save workflow from a run and rerun on new uploads
+- [x] Chat refinement on results page (`POST /api/runs/{id}/refine`) — creates child runs only (no run-level versions)
+- [x] Template version history + branch/revert (**workflow scope only**; run-level versions removed in V2)
 - [x] Email-based sign-in (restores same Supabase user + workflows)
+- [x] Export results via email (`POST /api/runs/{id}/email`) — Resend
+- [x] Push results to Google Sheets (`POST /api/runs/{id}/sheets`)
+- [x] Workflow settings: name, description, default email/Sheets URL (`PATCH /api/workflows/{id}/settings`)
+- [x] Update workflow from refined run (`PATCH /api/workflows/{id}`)
+- [x] Inbound email forwarding addresses + Mailgun webhook (`POST /api/inbound/email`)
 
-### Available Agent Types (v1)
+### Available Agent Types
 
 | Agent | What it does | Status |
 |-------|--------------|--------|
@@ -43,8 +50,10 @@
 | **Field Extractor** | LLM extracts structured fields from text based on user description | ✅ `transform.field_extractor` |
 | **Rules Agent** | Applies user-defined conditions (flag if amount > X, filter by date, etc.) | ✅ `transform.rules` |
 | **Formatter Agent** | Compiles results into CSV/JSON/table format | ✅ `output.formatter` |
+| **Email Agent** | Sends extraction results via email (HTML table + CSV attachment) | ✅ `output.email` |
+| **Google Sheets Agent** | Pushes rows to a spreadsheet tab | ✅ `output.google_sheets` |
 
-> **Note:** All 5 agents are implemented and registered. Rules is used when the task mentions flags/conditions (e.g. "flag over 50K").
+> **Note:** Core pipeline agents (OCR through Formatter) are always available. Email and Sheets are used when the planner or user requests delivery; export modals on the results page call the REST routes directly.
 
 ### Planner Logic
 
@@ -95,75 +104,65 @@ Step 4: Formatter (output: CSV with flag column)
 | **Deploy (backend)** | Railway | $5 free credit/month | ❌ Not started |
 | **Pre-deploy hardening** | CORS, rate limits, MIME, Dockerfile, etc. | See local `docs/GAPS-TECHNICAL.md` | ✅ Done |
 | **Templates** | Code-defined presets + Supabase mirror | `backend/app/templates/` | ✅ Done |
+| **User template versions** | Supabase Storage `user-templates` + Postgres index | Workflow versions; refine does not create versions | ✅ Done |
+| **Email delivery** | Resend API | `output.email` agent + `POST /api/runs/{id}/email` | ✅ Done |
+| **Google Sheets** | Service account JSON | `output.google_sheets` agent + `POST /api/runs/{id}/sheets` | ✅ Done |
+| **Inbound email** | Mailgun webhook | Forward to `*@ingest.agentflow.app` → auto-run workflow | ✅ Done |
 | **Code** | GitHub (public repo) | Recruiters will see this | ✅ [kabirrao2002/agentflow](https://github.com/kabirrao2002/agentflow) |
 
 ---
 
 ## Architecture
 
+Full diagrams (system context, three-layer templates, pipeline flow, persistence registry): **[ARCHITECTURE.md](./ARCHITECTURE.md)**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│              Next.js Frontend (localhost:3000)           │
-│  /  upload + task    /results/[id]  poll + table        │
-│  /workflows          /account       email sign-in       │
+│         Next.js Frontend V2 (localhost:3000)             │
+│  /  compact hero + inline run    /results/[id]  3-col    │
+│  /workflows + settings + runs    /account                  │
+│  Export bar: email, sheets, save workflow/version        │
 └──────────────────────────┬──────────────────────────────┘
                            │ REST API
 ┌──────────────────────────▼──────────────────────────────┐
 │                   FastAPI Backend                          │
 │  routes → Depends() → services → registry → backends     │
-│  ┌────────────┐  ┌──────────┐  ┌─────────────────────┐   │
-│  │ AuthService│  │ Planner  │  │ Pipeline Runner     │   │
-│  │ (email)    │  │ +Template│  │ (async + step save) │   │
-│  └────────────┘  └──────────┘  └─────────────────────┘   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Agent Registry: OCR │ Extract │ Rules │ Format      │   │
-│  └─────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────┐  ┌──────────────────────────┐  │
-│  │ persistence/registry │  │ documents/registry       │  │
-│  │ memory / supabase    │  │ local / supabase storage │  │
-│  └──────────────────────┘  └──────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ app/templates/ — 7 code-defined pipeline presets     │  │
-│  └──────────────────────────────────────────────────────┘  │
+│  Planner │ Runner │ RefineService │ Email/Sheets/Inbound │
+│  Agent Registry + pipeline_refiner (chat refine)         │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│   Supabase: Postgres (users, workflows, runs)             │
-│             Storage bucket `Documents` (uploaded files)   │
+│   Supabase Postgres + Storage                            │
+│   Tables: users, workflows, runs, inbound_addresses, …   │
+│   Buckets: Documents (uploads), user-templates (versions)│
 └───────────────────────────────────────────────────────────┘
-
-Session: browser localStorage holds user_id after sign-in.
-Data: always in Supabase when configured.
 ```
 
-See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
+See also: [ARCHITECTURE.md](./ARCHITECTURE.md), `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 
 ---
 
-## Pages (Frontend)
+## Pages (Frontend V2)
 
 ### 1. Landing Page (`/`)
 
-- [x] Hero: "Describe your task. Upload documents. AI does the rest."
-- [x] Template picker grid (invoice, resume, contract, …)
-- [x] Upload zone (drag & drop)
-- [x] Text input for task description + example task chips
-- [x] "Run Pipeline" button → redirects to results
+- [x] Compact hero + template chips (Source Serif 4)
+- [x] Inline upload + task + **Run** (single action row)
+- [x] Template picker → `POST /api/runs/template` or adhoc plan
 
 ### 2. Results Page (`/results/[runId]`)
 
-- [x] Live step cards with progress bar (queued → running → done / failed)
-- [x] Expandable steps: config, reason, output JSON
-- [x] Table view of extracted/processed data
-- [x] Download buttons: CSV, JSON
-- [x] Summary stats (documents, rows, steps, flags)
-- [x] Save as workflow
+- [x] Three-column layout: documents | results tabs | refine chat
+- [x] Live step progress, table view, CSV/JSON download
+- [x] Export bar: email modal, Sheets modal, save workflow, save version (workflow scope)
+- [x] Chat refine panel — branches to child run (no run-level version UI)
 
-### 3. Workflows (`/workflows`, `/workflows/[workflowId]`)
+### 3. Workflows (`/workflows`, `/workflows/[id]`, `/workflows/[id]/settings`, `/workflows/[id]/runs/[runId]`)
 
-- [x] List saved workflows
-- [x] Workflow detail with rerun panel
-- [x] Expandable run history (input docs + output download)
+- [x] Card grid list, detail with sidebar + rerun
+- [x] Settings page: name, description, default email/Sheets URL
+- [x] Workflow-scoped run results page
+- [x] Template version history + revert (workflow only)
 
 ### 4. Account (`/account`)
 
@@ -190,6 +189,11 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | POST | `/api/runs/template` | Run from template id (deterministic plan) | ✅ |
 | POST | `/api/runs` | Run explicit steps (background) | ✅ |
 | GET | `/api/runs/{id}` | Poll run status + results | ✅ |
+| POST | `/api/runs/{id}/refine` | Chat refine → child run (no version created) | ✅ |
+| POST | `/api/runs/{id}/email` | Email results via Resend (HTML + CSV) | ✅ |
+| POST | `/api/runs/{id}/sheets` | Push results to Google Sheet | ✅ |
+
+> **Removed in V2:** `GET/POST /api/runs/{id}/template-versions`, `POST /api/runs/{id}/revert` — versions live on workflows only; undo refine via browser back.
 
 ### Auth & Users
 
@@ -209,12 +213,47 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | GET | `/api/workflows/{id}` | Get workflow + steps | ✅ |
 | GET | `/api/workflows/{id}/runs` | List all runs for a workflow | ✅ |
 | POST | `/api/workflows/{id}/runs` | Rerun saved workflow | ✅ |
+| PATCH | `/api/workflows/{id}` | Update workflow from refined run (new version) | ✅ |
+| PATCH / PUT | `/api/workflows/{id}/settings` | Update metadata + delivery defaults | ✅ |
+| GET | `/api/workflows/{id}/template-versions` | List workflow template versions | ✅ |
+| GET | `/api/workflows/{id}/template-versions/{version_id}` | Preview workflow version | ✅ |
+| POST | `/api/workflows/{id}/revert` | Set workflow head to earlier version | ✅ |
+
+### Delivery & Inbound
+
+| Method | Endpoint | What it does | Status |
+|--------|----------|--------------|--------|
+| POST | `/api/inbound/email` | Mailgun webhook — process forwarded attachments | ✅ |
+| POST | `/api/inbound-addresses` | Create forwarding address for a workflow | ✅ |
+| GET | `/api/inbound-addresses?user_id=...` | List user's forwarding addresses | ✅ |
+| DELETE | `/api/inbound-addresses/{id}` | Delete forwarding address | ✅ |
+
+### Admin (owner — deferred)
+
+| Method | Endpoint | What it does | Status |
+|--------|----------|--------------|--------|
+| GET | `/api/admin/templates/feedback` | List user refinement events | ✅ |
+| POST | `/api/admin/templates/{id}/synthesize` | LLM synthesis from user feedback | ✅ |
+| POST | `/api/admin/templates/{id}/preview` | Preview master template changes | ✅ |
+| POST | `/api/admin/templates/{id}/apply` | Persist master template changes | ⬜ later (`ADMIN_API_KEY`) |
 
 ### Debug
 
 | Method | Endpoint | What it does | Status |
 |--------|----------|--------------|--------|
 | POST | `/api/extract` | Extract from raw text | ✅ |
+
+### Frontend API client (`frontend/src/lib/api.ts`)
+
+Typed fetch wrappers used by all pages. V2 alignment:
+
+| Area | Client behavior |
+|------|-----------------|
+| **Run versions** | Removed `getRunTemplateVersions`, `getRunTemplateVersion`, `revertRunToVersion` (backend removed in V2) |
+| **Workflow versions** | `getWorkflowTemplateVersions`, `revertWorkflowToVersion` — workflow scope only |
+| **Workflow settings** | `WorkflowResponse` includes `default_email`, `default_sheets_url`; `updateWorkflowSettings` sends same field names as backend |
+| **Export** | `emailResults({ to, subject })`, `pushToSheets({ url, sheet_name })` — aliases match backend `validation_alias` |
+| **Workflow update** | `updateWorkflowFromRun` sends `from_run_id` + `version_name` |
 
 ---
 
@@ -225,12 +264,13 @@ See also: `backend/DOCUMENT_STORAGE.md`, `frontend/FRONTEND.md`
 | **Protocol** (interface) | `persistence/protocols.py`, `services/auth/protocols.py` | Contracts for backends |
 | **Registry** (wiring) | `persistence/registry.py`, `services/auth/registry.py` | Config → implementation |
 | **FastAPI Depends** | `api/dependencies.py` | Inject services into routes |
-| **Service classes** | `users/`, `workflows/`, `auth/`, `documents/`, `templates/` | Business logic |
+| **Service classes** | `users/`, `workflows/`, `templates/`, `pipeline/` | Business logic |
+| **Version service** | `UserTemplateVersionService` | Workflow template payloads in Storage |
 | **Template catalog** | `app/templates/` + `persistence/templates/` | Code-defined presets; DB mirror via bootstrap |
 | **Validation utils** | `validation/task_input.py` | Task sanitization (no Pydantic → services import) |
 | **Domain errors** | `models/domain/document.py` | `InvalidUploadError` etc.; routes map to HTTP |
 
-See local `docs/ENGINEERING-PRINCIPLES.md` for coding rules. Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
+See [docs/ENGINEERING-PRINCIPLES.md](./docs/ENGINEERING-PRINCIPLES.md) for coding rules. Adding a new storage backend (e.g. S3): one file + one line in `registry.py` + env var.
 
 ---
 
@@ -241,11 +281,14 @@ See local `docs/ENGINEERING-PRINCIPLES.md` for coding rules. Adding a new storag
 | Table | Purpose |
 |-------|---------|
 | `users` | `id`, `name`, `email` (indexed; used for sign-in lookup) |
-| `workflows` | Saved pipeline templates per user |
+| `workflows` | Saved pipeline templates per user; V2: `default_email`, `default_sheets_url` |
 | `workflow_steps` | Steps belonging to a workflow |
 | `workflow_runs` | Execution records (status, result JSON, planned_steps) |
 | `workflow_step_runs` | Per-step status + output during a run |
 | `pipeline_templates` | Editable task presets (landing page; not user workflows) |
+| `user_template_versions` | Metadata index for **workflow** template versions |
+| `refinement_events` | User refine messages (owner aggregation) |
+| `inbound_addresses` | Unique `flow-*@ingest.agentflow.app` → workflow mapping |
 
 Document files are stored in **Supabase Storage** (`Documents` bucket), not in Postgres.
 
@@ -265,6 +308,15 @@ CORS_ORIGINS=http://localhost:3000    # comma-separated; set prod URL on deploy
 RATE_LIMIT_RUNS_ADHOC=10/minute
 RATE_LIMIT_UPLOAD=20/minute
 MAX_UPLOAD_SIZE_MB=10
+
+# V2 delivery (optional — export modals return 502 without these)
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=onboarding@resend.dev
+GOOGLE_SERVICE_ACCOUNT_JSON=
+
+# V2 inbound email (optional)
+INBOUND_EMAIL_DOMAIN=ingest.agentflow.app
+INBOUND_WEBHOOK_SECRET=
 ```
 
 ### Frontend (`frontend/.env.local`)
@@ -324,18 +376,36 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 
 - [ ] Deploy backend to Railway
 - [ ] Deploy frontend to Vercel
-- [ ] Set production env vars + `CORS_ORIGINS`
+- [ ] Set production env vars + `CORS_ORIGINS` (+ Resend / Sheets / inbound secrets)
 - [ ] End-to-end smoke test on live URLs
 - [ ] Record 60-sec demo video
 - [ ] Root README with screenshots + live demo link
 - [ ] Add to LinkedIn / resume
 - [x] Merge `develop` → `main` for release (`800cc03`)
 
+### V2: Frontend + Backend redesign ✅ (merged to `develop`, 2026-08-08)
+
+- [x] Frontend V2 UI — compact home, 3-col results, export modals, workflow settings ([FRONTEND-V2-PLAN](./docs/FRONTEND-V2-PLAN.md))
+- [x] Backend V2 — email, Sheets, inbound, workflow PATCH/settings ([BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md))
+- [x] Versioning simplification — workflow-only versions; refine creates child runs only
+- [x] `output.email` + `output.google_sheets` agents
+- [x] Migrations `008_inbound_addresses`, `009_workflow_delivery_defaults`; `schema.sql` synced
+- [x] E2E smoke script updated (`frontend/scripts/e2e-smoke.sh`) — 32 passed
+- [x] 66 backend tests passing
+- [x] `schema.sql` synced + Sheets A1 quoting fix (`dfef3a7`)
+- [x] Frontend `api.ts` audit fixes — dead run-version clients removed; settings field names match backend
+
+### V2 polish (optional, pre-deploy)
+
+- [ ] Inbound webhook: email results back to sender when run completes
+- [ ] Wire workflow settings page to `POST /api/inbound-addresses` (real addresses vs placeholder)
+- [ ] Add `RESEND_API_KEY` / `GOOGLE_SERVICE_ACCOUNT_JSON` for live export testing
+
 ---
 
 ## Master Tracker
 
-> **Single source of truth for open work.** Extended notes: local `docs/GAPS-TECHNICAL.md`, `docs/PLAN-AND-NEXT-STEPS.md`, `docs/FEATURE-ROADMAP.md`, `docs/TEMPLATES.md` (gitignored).
+> **Single source of truth for open work.** Extended notes: [docs/GAPS-TECHNICAL.md](./docs/GAPS-TECHNICAL.md), [docs/PLAN-AND-NEXT-STEPS.md](./docs/PLAN-AND-NEXT-STEPS.md), [docs/FEATURE-ROADMAP.md](./docs/FEATURE-ROADMAP.md).
 
 ### Gap priority (from code review)
 
@@ -359,11 +429,14 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | Version | Feature | Effort | Doc |
 |---------|---------|--------|-----|
 | V1.0.1 | Template library (picker + API) | ~3 hr | ✅ Done — `backend/app/templates/` |
-| V1.1 | Email delivery (Resend) | Medium | `docs/FEATURE-ROADMAP.md` |
-| V1.2 | Google Sheets push | Medium | `docs/FEATURE-ROADMAP.md` |
-| V1.3 | Chat refinement on results | High | `docs/CHAT-REFINEMENT.md` |
-| V2.0 | Live PDF preview + field highlights | 6–10 hr | `docs/FEATURE-ROADMAP.md` |
-| V2.0 | Auto-correct / learning from edits | Medium | `docs/FEATURE-ROADMAP.md` |
+| V1.1 | Email delivery (Resend) | Medium | ✅ Done — `output.email`, `POST /api/runs/{id}/email` |
+| V1.2 | Google Sheets push | Medium | ✅ Done — `output.google_sheets`, `POST /api/runs/{id}/sheets` |
+| V1.3 | Chat refinement + versioned user templates | High | ✅ Done — workflow versions only in V2 |
+| V2.0 | Frontend V2 redesign + export/settings UX | High | ✅ Done — [FRONTEND-V2-PLAN](./docs/FRONTEND-V2-PLAN.md) |
+| V2.0 | Backend V2 delivery + inbound email | High | ✅ Done — [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
+| V2.1 | Live PDF preview + field highlights | 6–10 hr | `docs/FEATURE-ROADMAP.md` |
+| V2.1 | Auto-correct / learning from edits | Medium | `docs/FEATURE-ROADMAP.md` |
+| V3.0 | Inbound reply-to-sender after run completes | Medium | partial — webhook runs workflow; no auto-reply yet |
 | V3.0 | Watch folder / inbox automation | 12–20 hr | `docs/FEATURE-ROADMAP.md` |
 
 ### Phase A — Deploy (P0)
@@ -427,23 +500,38 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | [x] | Run `setup_templates.sql` in Supabase | User completed |
 | [ ] | Category filter UI (API supports `?category=`) | optional V1.0.2 |
 
+### Phase I — Versioned user templates (V1.3) ✅
+
+| Status | Task | Doc |
+|--------|------|-----|
+| [x] | Three-layer model: master → run versions → workflow versions | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| [x] | `user_template_versions` + `refinement_events` tables (migration 007) | `supabase/migrations/007_*.sql` |
+| [x] | Supabase Storage bucket `user-templates` for payloads | [SUPABASE_SETUP.md](./backend/SUPABASE_SETUP.md) |
+| [x] | `POST /api/runs/{id}/refine` + version pointer dedup in Postgres | API |
+| [x] | List / preview / revert APIs (**workflow scope only**) | `template_versions.py` |
+| [x] | Frontend workflow settings + export modals | Frontend V2 |
+| [ ] | Inbound auto-reply with results to sender | deferred |
+| [ ] | Owner master template apply (`ADMIN_API_KEY`) | deferred |
+
 ### Phase F — Product features (V1.1+)
 
 | Status | Version | Feature | Doc |
 |--------|---------|---------|-----|
-| [ ] | V1.1 | Email delivery (Resend) — `output.email` agent | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| [ ] | V1.2 | Google Sheets push — `output.google_sheets` | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| [ ] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
-| [ ] | V2.0 | Live PDF preview + field highlights | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| [ ] | V2.0 | Auto-correct / learning from user edits | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
-| [ ] | V3.0 | Watch folder / inbox automation | [FEATURE-ROADMAP](./FEATURE-ROADMAP.md) |
+| [x] | V1.1 | Email delivery (Resend) — `output.email` agent | [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
+| [x] | V1.2 | Google Sheets push — `output.google_sheets` | [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
+| [x] | V1.3 | Chat refinement on results — `POST /api/runs/{id}/refine` | [CHAT-REFINEMENT.md](./docs/CHAT-REFINEMENT.md) |
+| [x] | V2.0 | Frontend V2 + Backend V2 delivery APIs | [FRONTEND-V2-PLAN](./docs/FRONTEND-V2-PLAN.md), [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
+| [ ] | V2.1 | Live PDF preview + field highlights | [FEATURE-ROADMAP](./docs/FEATURE-ROADMAP.md) |
+| [ ] | V2.1 | Auto-correct / learning from user edits | [FEATURE-ROADMAP](./docs/FEATURE-ROADMAP.md) |
+| [ ] | V3.0 | Inbound email auto-reply to sender | partial webhook in V2 |
+| [ ] | V3.0 | Watch folder / inbox automation | [FEATURE-ROADMAP](./docs/FEATURE-ROADMAP.md) |
 
 ### Phase G — New agents (planned)
 
 | Status | Agent type | Version | Doc |
 |--------|------------|---------|-----|
-| [ ] | `output.email` | V1.1 | [AGENTS.md](./AGENTS.md) |
-| [ ] | `output.google_sheets` | V1.2 | [AGENTS.md](./AGENTS.md) |
+| [x] | `output.email` | V1.1 | [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
+| [x] | `output.google_sheets` | V1.2 | [BACKEND-V2-PLAN](./docs/BACKEND-V2-PLAN.md) |
 | [ ] | `transform.summarizer` | V1.3 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `transform.classifier` | V2.0 | [AGENTS.md](./AGENTS.md) |
 | [ ] | `processor.table_extract` | V2.0 | [AGENTS.md](./AGENTS.md) |
@@ -459,8 +547,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 | [ ] | SSE / WebSockets for run status (replace polling) | [GAPS #11](./GAPS-TECHNICAL.md) |
 | [ ] | S3 document backend (registry ready) | SPEC Future |
 | [ ] | `global-error.tsx` (optional) | [GAPS #10](./GAPS-TECHNICAL.md) |
-| [ ] | Chat refinement: cache OCR text on run for partial re-run | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
-| [ ] | Chat refinement: `parent_run_id` lineage column | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+| [x] | Chat refinement: cache OCR text on run for partial re-run | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
+| [x] | Chat refinement: `parent_run_id` lineage column | [CHAT-REFINEMENT.md](./CHAT-REFINEMENT.md) |
 
 ### Completed (reference)
 
@@ -474,6 +562,8 @@ NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB=10
 - [x] Email sign-in, workflow save/rerun, run history
 - [x] Docs transcribed from screenshots: ENGINEERING-PRINCIPLES, GAPS-TECHNICAL, TEMPLATES, AGENTS, CHAT-REFINEMENT, FEATURE-ROADMAP, PROMPTS, README (+ MARKET-ANALYSIS stub)
 - [x] Template library (code-defined, 7 templates, `POST /api/runs/template`)
+- [x] Versioned user templates (workflow scope; Storage + branch/revert APIs, 66 tests)
+- [x] Frontend V2 + Backend V2 (email, Sheets, inbound, workflow settings)
 
 </details>
 
@@ -517,4 +607,4 @@ This is not a tutorial project. This is production-level architecture on a publi
 ---
 
 *Created: 2026-08-02*  
-*Updated: 2026-08-06 — Merged to main (`800cc03`); deploy is next*
+*Updated: 2026-08-08 — V2 full-stack; `api.ts` parity; schema.sql + Sheets quoting (`dfef3a7`)*

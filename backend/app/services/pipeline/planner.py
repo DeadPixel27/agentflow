@@ -7,9 +7,10 @@ import logging
 import uuid
 from typing import Any
 
-from app.agents.core.registry import get_agent_catalog, is_valid_agent_type
+from app.agents.core.registry import get_agent_catalog
 from app.models.domain.pipeline import PipelinePlan, PlannedStep
-from app.services.llm.groq_client import complete_json
+from app.services.llm.router import LLMTask, complete_json
+from app.services.pipeline.step_parse import StepParseError, parse_planned_steps
 from app.validation.task_input import format_user_task_for_llm, require_task_description
 from app.services.documents.upload_loader import UploadDocumentInfo, load_upload_documents
 
@@ -51,8 +52,11 @@ async def create_plan(
         raise ValueError(f"No documents found for upload {upload_id}")
 
     user_prompt = _build_prompt(task, documents)
-    parsed = await complete_json(SYSTEM_PROMPT, user_prompt)
-    steps = _parse_and_validate_steps(parsed)
+    parsed = await complete_json(SYSTEM_PROMPT, user_prompt, task=LLMTask.PLANNER)
+    try:
+        steps = parse_planned_steps(parsed)
+    except StepParseError as exc:
+        raise RuntimeError(str(exc)) from exc
 
     return PipelinePlan(
         pipeline_id=str(uuid.uuid4()),
@@ -98,38 +102,3 @@ def _build_prompt(
         },
     }
     return json.dumps(payload, indent=2)
-
-
-def _parse_and_validate_steps(parsed: dict[str, Any]) -> list[PlannedStep]:
-    raw_steps = parsed.get("steps", [])
-    if not raw_steps:
-        raise RuntimeError("Planner returned no steps")
-
-    steps: list[PlannedStep] = []
-    for item in raw_steps:
-        agent_type = item.get("agent_type", "")
-        if not is_valid_agent_type(agent_type):
-            raise RuntimeError(f"Planner returned unknown agent_type: {agent_type}")
-
-        config = item.get("config", {})
-        if not isinstance(config, dict):
-            config = {}
-
-        steps.append(
-            PlannedStep(
-                step_order=int(item.get("step_order", len(steps) + 1)),
-                agent_type=agent_type,
-                config=config,
-                reason=str(item.get("reason", "")),
-            )
-        )
-
-    steps.sort(key=lambda s: s.step_order)
-    expected_orders = list(range(1, len(steps) + 1))
-    actual_orders = [s.step_order for s in steps]
-    if actual_orders != expected_orders:
-        raise RuntimeError(
-            f"Planner returned invalid step_order sequence: {actual_orders}"
-        )
-
-    return steps

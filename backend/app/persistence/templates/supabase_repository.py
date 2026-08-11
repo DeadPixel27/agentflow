@@ -66,6 +66,33 @@ class SupabaseTemplateRepository:
         self._probe_table()
         return self._fallback.get_template(template_id)
 
+    def save_template(self, template: PipelineTemplate) -> PipelineTemplate:
+        self._probe_table()
+        saved = self._fallback.save_template(template)
+        if not self._use_fallback:
+            try:
+                _get_client().table("pipeline_templates").upsert(
+                    {
+                        "id": template.template_id,
+                        "name": template.name,
+                        "description": template.description,
+                        "icon": template.icon,
+                        "category": template.category,
+                        "default_task": template.task_description,
+                        "fields": template.fields,
+                        "extraction_instructions": template.extraction_instructions,
+                        "rules": template.rules,
+                        "output_format": template.output_format,
+                        "suggested_steps": template.suggested_steps,
+                        "example_output_fields": template.example_output_fields,
+                        "sort_order": template.sort_order,
+                        "is_active": template.is_active,
+                    }
+                ).execute()
+            except APIError as exc:
+                logger.warning("Failed to persist template %s to Supabase: %s", template.template_id, exc)
+        return saved
+
 
 def is_template_storage_configured() -> bool:
     return is_supabase_configured()

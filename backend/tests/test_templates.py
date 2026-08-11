@@ -17,14 +17,14 @@ client = TestClient(app)
 def test_memory_repository_lists_seven_templates():
     repo = MemoryTemplateRepository()
     templates = repo.list_templates()
-    assert len(templates) == 7
+    assert len(templates) == 8
     assert templates[0].template_id == "invoice"
 
 
 def test_memory_repository_filters_by_category():
     repo = MemoryTemplateRepository()
     finance = repo.list_templates(category="finance")
-    assert len(finance) == 3
+    assert len(finance) == 4
     assert all(item.category == "finance" for item in finance)
 
 
@@ -47,7 +47,7 @@ def test_list_templates_api():
         response = client.get("/api/templates")
         assert response.status_code == 200
         data = response.json()
-        assert data["count"] == 7
+        assert data["count"] == 8
         first = data["templates"][0]
         assert first["template_id"] == "invoice"
         assert "icon" in first
@@ -88,7 +88,7 @@ def test_supabase_repository_falls_back_when_table_missing(monkeypatch):
     )
     repo = SupabaseTemplateRepository()
     templates = repo.list_templates()
-    assert len(templates) == 7
+    assert len(templates) == 8
     assert templates[0].template_id == "invoice"
 
 

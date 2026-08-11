@@ -7,6 +7,7 @@ python-multipart==0.0.20
 
 # Settings from .env files
 pydantic-settings==2.7.1
+email-validator>=2.0.0
 
 # PDF text extraction (digital PDFs)
 pymupdf==1.25.3
@@ -14,12 +15,23 @@ pymupdf==1.25.3
 # OCR for images and scanned PDFs
 pytesseract==0.3.13
 Pillow==11.1.0
+rapidocr-onnxruntime>=1.4.0
+numpy>=1.24.0
+
+# Layout-preserving PDF text (tables, structure)
+docling>=2.0.0
 
 # Convert PDF pages to images (for scanned PDF OCR)
 pdf2image==1.17.0
 
-# Groq LLM (field extraction)
+# Groq LLM (planning / refine)
 groq==0.18.0
+
+# OpenAI LLM (primary extraction)
+openai>=1.60.0
+
+# JWT auth
+python-jose[cryptography]==3.3.0
 
 # Supabase (persistence)
 supabase>=2.16.0
@@ -32,6 +44,13 @@ filetype==1.2.0
 
 # LLM retry
 tenacity==9.0.0
+
+# Email delivery
+resend>=2.0.0
+
+# Google Sheets
+google-api-python-client>=2.100.0
+google-auth>=2.20.0
 
 # Tests
 pytest==8.3.4

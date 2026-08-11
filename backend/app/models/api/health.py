@@ -9,3 +9,4 @@ class HealthResponse(BaseModel):
     persistence: str = "memory"
     database: Optional[str] = None
     document_storage: str = "local"
+    detail: Optional[str] = None

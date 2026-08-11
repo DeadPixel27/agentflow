@@ -3,6 +3,7 @@
 from typing import Optional
 
 from app.models.domain.template import PipelineTemplate
+from app.templates.bank_statement import BANK_STATEMENT_TEMPLATE
 from app.templates.contract import CONTRACT_TEMPLATE
 from app.templates.invoice import INVOICE_TEMPLATE
 from app.templates.medical_bill import MEDICAL_BILL_TEMPLATE
@@ -19,6 +20,7 @@ ALL_TEMPLATES: list[PipelineTemplate] = [
     PURCHASE_ORDER_TEMPLATE,
     LEASE_TEMPLATE,
     MEDICAL_BILL_TEMPLATE,
+    BANK_STATEMENT_TEMPLATE,
 ]
 
 _TEMPLATES_BY_ID: dict[str, PipelineTemplate] = {

@@ -34,6 +34,8 @@ class FormatterHandler(StepHandler):
             "content": content,
             "rows": rows,
             "row_count": len(rows),
+            "field_confidence": ctx.data.get("field_confidence") or {},
+            "validation_warnings": ctx.data.get("validation_warnings") or {},
         }
         ctx.data["output"] = output
 
@@ -42,6 +44,11 @@ class FormatterHandler(StepHandler):
                 "format": output_format,
                 "row_count": len(rows),
                 "content_preview": content[:200],
+                "documents_with_warnings": sum(
+                    1
+                    for warnings in (ctx.data.get("validation_warnings") or {}).values()
+                    if warnings
+                ),
             }
         )
 

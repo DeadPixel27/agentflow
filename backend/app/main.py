@@ -25,7 +25,25 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 import app.agents.handlers  # noqa: F401 — register all agents on startup
-from app.api.routes import auth, extract, health, pipeline, runs, templates, upload, uploads, users, workflows
+from app.api.routes import (
+    admin,
+    auth,
+    email,
+    extract,
+    health,
+    inbound,
+    inbound_addresses,
+    pipeline,
+    runs,
+    sheets,
+    template_versions,
+    templates,
+    upload,
+    uploads,
+    users,
+    waitlist,
+    workflows,
+)
 from app.config import settings
 from app.logging_config import setup_logging
 from app.persistence.templates.bootstrap import ensure_pipeline_templates_seeded
@@ -36,7 +54,22 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.persistence import get_data_backend_name
+
+    settings.require_persistent_backend(get_data_backend_name())
+
     ensure_pipeline_templates_seeded()
+    if settings.orphan_reclaim_on_startup:
+        from app.services.pipeline.orphan_reclaim import reclaim_all_running
+
+        try:
+            await reclaim_all_running()
+        except Exception:
+            import logging
+
+            logging.getLogger("runner").exception(
+                "Orphan run reclaim on startup failed"
+            )
     yield
 
 
@@ -61,12 +94,19 @@ app.add_middleware(
 
 # Register routes — each router file owns a group of endpoints
 app.include_router(health.router)
+app.include_router(admin.router)
 app.include_router(auth.router)
+app.include_router(waitlist.router)
 app.include_router(users.router)
 app.include_router(upload.router)
 app.include_router(uploads.router)
 app.include_router(extract.router)
 app.include_router(pipeline.router)
 app.include_router(runs.router)
+app.include_router(email.router)
+app.include_router(sheets.router)
+app.include_router(inbound.router)
+app.include_router(inbound_addresses.router)
+app.include_router(template_versions.router)
 app.include_router(templates.router)
 app.include_router(workflows.router)

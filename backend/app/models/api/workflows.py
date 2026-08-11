@@ -28,8 +28,14 @@ class WorkflowResponse(BaseModel):
     description: str
     source: str
     task_description: str
+    parent_template_id: Optional[str] = None
+    current_template_version_id: Optional[str] = None
+    current_version_number: Optional[int] = None
+    extraction_prompt: Optional[str] = None
     steps: list[WorkflowStepResponse]
     created_at: Optional[str] = None
+    default_email: Optional[str] = None
+    default_sheets_url: Optional[str] = None
 
 
 class WorkflowSummaryResponse(BaseModel):
@@ -52,3 +58,22 @@ class WorkflowFromRunRequest(BaseModel):
     user_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = ""
+
+
+class WorkflowUpdateFromRunRequest(BaseModel):
+    """Update a workflow's template from a refined run."""
+
+    run_id: str = Field(min_length=1, validation_alias="from_run_id")
+    version_name: str = ""
+    description: str = ""
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkflowSettingsUpdateRequest(BaseModel):
+    """Update workflow settings (name, description, delivery defaults)."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    default_email: Optional[str] = None
+    default_sheets_url: Optional[str] = None

@@ -2,28 +2,38 @@
 Pipeline Route — planner creates a step pipeline from task + upload.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.api.dependencies import CurrentUserDep, RepoDep
+from app.api.ownership import get_owned_upload
 from app.config import settings
 from app.models.api.pipeline import (
     PipelineCreateRequest,
     PipelineCreateResponse,
     PlannedStepResponse,
 )
-from app.services.pipeline.planner import create_plan
+from app.rate_limit import limiter
 from app.services.documents.upload_loader import UploadNotFoundError
+from app.services.pipeline.planner import create_plan
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
 @router.post("/create", response_model=PipelineCreateResponse)
-async def create_pipeline(body: PipelineCreateRequest) -> PipelineCreateResponse:
+@limiter.limit(settings.rate_limit_pipeline)
+async def create_pipeline(
+    request: Request,
+    body: PipelineCreateRequest,
+    repo: RepoDep,
+    current_user: CurrentUserDep,
+) -> PipelineCreateResponse:
     """
     Plan a document processing pipeline from a task description and upload.
 
     The planner inspects uploaded documents and returns an ordered list of
     agent steps (field extraction, rules, formatting, etc.).
     """
+    get_owned_upload(repo, body.upload_id, current_user)
     try:
         plan = await create_plan(body.upload_id, body.task_description)
     except UploadNotFoundError as e:
