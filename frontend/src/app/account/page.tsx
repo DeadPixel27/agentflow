@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError, getIntegrationsStatus, getUserUsage, updateMyProfile, type IntegrationsStatus, type UsageSummary } from "@/lib/api";
-import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
+import { FREE_EMAILS_PER_MONTH, FREE_PAGES_PER_MONTH, FREE_SHEETS_PER_MONTH } from "@/lib/free-plan";
 import { hasPendingRun } from "@/lib/pending-run";
 import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -338,11 +338,21 @@ export default function AccountPage() {
                 </Button>
               </Link>
             </div>
-            <div className="pt-2">
+            <div className="pt-2 space-y-3">
               <UsageBar
                 label="Pages extracted"
                 used={usage?.pages_used ?? 0}
                 limit={usage?.pages_limit ?? FREE_PAGES_PER_MONTH}
+              />
+              <UsageBar
+                label="Emails sent"
+                used={usage?.emails_used ?? 0}
+                limit={usage?.emails_limit ?? FREE_EMAILS_PER_MONTH}
+              />
+              <UsageBar
+                label="Sheets pushes"
+                used={usage?.sheets_used ?? 0}
+                limit={usage?.sheets_limit ?? FREE_SHEETS_PER_MONTH}
               />
             </div>
             {usage && usage.pages_used >= usage.pages_limit && (

@@ -1,7 +1,7 @@
 # Nexora — Next Steps
 
 **Updated:** 2026-08-11  
-**Branch:** `develop`
+**Branch:** `feature/hard-usage-caps` → merge to `develop`
 
 Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 
@@ -11,7 +11,7 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 
 | # | Task | Est. | Notes |
 |---|------|------|-------|
-| 1 | **Hard usage caps per feature** | ~3–4h | Hard caps (not soft warnings) for extract/pages, refine, emails, Sheets; clear 429 UI. Refine: reject out-of-scope prompts before LLM spend. |
+| 1 | ~~**Hard usage caps per feature**~~ | done | Pages/extract, refine (cap + out-of-scope refuse), email/Sheets HTTP + agents; clear 429 modal; account shows outbound bars. |
 | 2 | **Deploy** | ~4h | Supabase + Railway + Vercel + domain + smoke test. See [DEPLOYMENT.md](./DEPLOYMENT.md). |
 | 3 | **Real-doc testing** | ~3h | 3–5 docs each: invoice, receipt, resume. Score accuracy before extra hardening. |
 | 4 | **Launch kit** | ~2h | 60s Loom + Reddit / IH / HN drafts + README screenshots + live URL. |
@@ -47,4 +47,4 @@ Launch product (V2/V3 + auth/metering) is built. Remaining work below.
 
 ## Immediate next action
 
-Start **#1 Hard usage caps**, then **#2 Deploy**.
+**Deploy** (#2), then real-doc testing + launch kit.

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ModalShell } from "@/components/modals/modal-shell";
 import { Button } from "@/components/ui/button";
 import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
-import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
+import { pricingHref, waitlistSourceFromLimitMessage } from "@/lib/waitlist-source";
 
 interface UsageLimitModalProps {
   open: boolean;
@@ -20,6 +20,7 @@ export function UsageLimitModal({
   message,
 }: UsageLimitModalProps) {
   const router = useRouter();
+  const source = waitlistSourceFromLimitMessage(message);
 
   return (
     <ModalShell
@@ -42,7 +43,7 @@ export function UsageLimitModal({
           <Button
             onClick={() => {
               onClose();
-              router.push(pricingHref(WAITLIST_SOURCES.pagesExhausted));
+              router.push(pricingHref(source));
             }}
           >
             Join Pro Waitlist

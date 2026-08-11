@@ -213,6 +213,7 @@ export interface RefinePlanResponse {
   planned_changes: string[];
   accumulated_instruction: string;
   preview: RefinePreviewRow[];
+  in_scope?: boolean;
 }
 
 export interface TemplateVersionSummary {
@@ -631,6 +632,10 @@ export async function deleteInboundAddress(addressId: string): Promise<void> {
 export interface UsageSummary {
   pages_used: number;
   pages_limit: number;
+  emails_used?: number;
+  emails_limit?: number;
+  sheets_used?: number;
+  sheets_limit?: number;
   resets_at: string | null;
 }
 

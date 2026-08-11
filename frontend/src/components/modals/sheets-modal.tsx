@@ -51,7 +51,6 @@ export function SheetsModal({
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        toastError(e.message);
         setUsageLimitMsg(e.message);
         setShowUsageLimit(true);
       } else {

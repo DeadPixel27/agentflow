@@ -42,7 +42,6 @@ export function RerunZone({
       router.push(`/workflows/${workflowId}/runs/${run.run_id}`);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        toastError(e.message);
         setUsageLimitMsg(e.message);
         setShowUsageLimit(true);
       } else {

@@ -53,6 +53,10 @@ async def test_record_and_summarize_usage():
     summary = await get_usage_summary("user-1")
     assert summary["pages_used"] == 5
     assert summary["pages_limit"] == 50
+    assert summary["emails_used"] == 0
+    assert summary["emails_limit"] == settings.free_email_limit_monthly
+    assert summary["sheets_used"] == 0
+    assert summary["sheets_limit"] == settings.free_sheets_limit_monthly
     assert summary["resets_at"]
 
 
@@ -344,6 +348,85 @@ async def test_refine_plan_preview_returns_429_when_over_monthly_cap(monkeypatch
     )
     assert response.status_code == 429
     assert preview_calls["n"] == 0  # must not burn GPT-4o when over cap
+
+
+@pytest.mark.asyncio
+async def test_refine_plan_returns_429_when_refine_cap_hit(monkeypatch):
+    """Plan mode must block at max_refines_per_run before Groq/preview spend."""
+    from app.api.dependencies import get_repo, get_version_service
+    from app.models.domain.pipeline import PlannedStep
+    from app.models.domain.run import RunResult, StepRunRecord
+    from app.persistence.memory_repository import MemoryRepository
+    from app.persistence.user_templates.local_repository import LocalUserTemplateRepository
+    from app.services.templates.user_template_version_service import UserTemplateVersionService
+
+    monkeypatch.setattr(settings, "max_refines_per_run", 1)
+
+    plan_calls = {"n": 0}
+
+    async def _fake_plan(**_kwargs):
+        plan_calls["n"] += 1
+        return {
+            "in_scope": True,
+            "ready": True,
+            "message": "Ready",
+            "planned_changes": ["x"],
+            "accumulated_instruction": "x",
+        }
+
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_chat.plan_refinement",
+        _fake_plan,
+    )
+
+    repo = MemoryRepository()
+    parent = RunResult(
+        run_id="run-parent",
+        upload_id="upload-1",
+        task_description="extract",
+        status="completed",
+        steps=[
+            StepRunRecord(
+                step_order=1,
+                agent_type="transform.field_extractor",
+                status="completed",
+            )
+        ],
+        planned_steps=[
+            PlannedStep(
+                step_order=1,
+                agent_type="transform.field_extractor",
+                config={"fields": ["vendor"]},
+                reason="extract",
+            )
+        ],
+        user_id="user-1",
+        result={"rows": [{"vendor": "Acme"}]},
+    )
+    child = RunResult(
+        run_id="run-child",
+        upload_id="upload-1",
+        task_description="extract",
+        status="completed",
+        parent_run_id="run-parent",
+        steps=[],
+        planned_steps=parent.planned_steps,
+        user_id="user-1",
+        result={"rows": [{"vendor": "Acme"}]},
+    )
+    repo.save_run(parent)
+    repo.save_run(child)
+    app.dependency_overrides[get_repo] = lambda: repo
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    app.dependency_overrides[get_version_service] = lambda: versions
+    override_current_user()
+
+    response = client.post(
+        "/api/runs/run-parent/refine/plan",
+        json={"message": "fix vendor", "chat_history": []},
+    )
+    assert response.status_code == 429
+    assert plan_calls["n"] == 0
 
 
 @pytest.mark.asyncio

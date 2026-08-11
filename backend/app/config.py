@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # Global page brake across all users (UTC day). Keep low while OpenAI
     # credit balance is small — 100 pages ≈ ~$1 at typical extract cost.
     global_daily_page_limit: int = 100
-    # Soft OpenAI USD budget (estimated from token usage). 0 = disabled.
+    # Estimated OpenAI USD budget (token-based). 0 = disabled. Hard fail-closed gate.
     # With ~$5 credit, $1/day keeps the balance alive ~5 full days of burn.
     openai_daily_budget_usd: float = 1.0
     # Outbound free-tier units (separate from page pool)

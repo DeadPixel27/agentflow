@@ -59,6 +59,7 @@ class RefinePlanResponse(BaseModel):
     planned_changes: list[str] = Field(default_factory=list)
     accumulated_instruction: str = ""  # full instruction to send to /refine when ready
     preview: list[RefinePreviewRow] = Field(default_factory=list)
+    in_scope: bool = True  # false = refused; no preview / Apply
 
 
 class RunAdhocRequest(BaseModel):
