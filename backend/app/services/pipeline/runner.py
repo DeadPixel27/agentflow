@@ -171,7 +171,11 @@ async def execute_run(run_id: str) -> None:
     ctx = WorkflowContext(
         upload_id=run.upload_id,
         task_description=run.task_description,
-        data={"documents": documents},
+        data={
+            "documents": documents,
+            "user_id": user_id,
+            "run_id": run_id,
+        },
     )
 
     step_runs = list(run.steps)

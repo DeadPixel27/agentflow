@@ -5,8 +5,14 @@ from typing import Any
 from app.agents.core.base import StepHandler, StepResult
 from app.agents.core.context import WorkflowContext
 from app.agents.core.registry import register_agent
+from app.config import settings
 from app.models.domain.email import EmailRequest
 from app.services.email.email_service import send_results_email
+from app.services.usage.metering import (
+    EMAIL_EVENT_TYPE,
+    refund_outbound_usage,
+    reserve_outbound_usage,
+)
 
 
 class EmailHandler(StepHandler):
@@ -23,6 +29,18 @@ class EmailHandler(StepHandler):
         if not rows:
             raise ValueError("No rows available — run field_extractor first")
 
+        user_id = ctx.data.get("user_id")
+        run_id = ctx.data.get("run_id")
+        if not user_id:
+            raise ValueError("Cannot send email without user metering context")
+
+        await reserve_outbound_usage(
+            str(user_id),
+            EMAIL_EVENT_TYPE,
+            settings.free_email_limit_monthly,
+            run_id=str(run_id) if run_id else None,
+        )
+
         request = EmailRequest(
             to_email=to_email,
             subject=config.get("subject", "Your Nexora Results"),
@@ -30,7 +48,19 @@ class EmailHandler(StepHandler):
             pipeline_name=ctx.task_description[:80],
             doc_count=len(ctx.data.get("documents", [])),
         )
-        result = await send_results_email(request)
+        try:
+            result = await send_results_email(request)
+        except Exception:
+            try:
+                await refund_outbound_usage(
+                    str(user_id),
+                    EMAIL_EVENT_TYPE,
+                    run_id=str(run_id) if run_id else None,
+                    reason="email_agent_failed",
+                )
+            except Exception:
+                pass
+            raise
 
         return StepResult(
             output={

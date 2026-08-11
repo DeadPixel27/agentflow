@@ -1,2 +1,4 @@
-/** UI copy for the free monthly page allowance — keep in sync with backend `free_page_limit_monthly`. */
+/** Free-tier limits — keep in sync with backend Settings (`free_*_limit_monthly`). */
 export const FREE_PAGES_PER_MONTH = 50;
+export const FREE_EMAILS_PER_MONTH = 20;
+export const FREE_SHEETS_PER_MONTH = 20;

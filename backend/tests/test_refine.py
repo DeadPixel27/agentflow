@@ -281,8 +281,58 @@ def test_plan_refinement_forces_ready_when_user_answers_clarification():
         field_names=["years_of_experience", "full_name"],
     )
     assert result["ready"] is True
+    assert result["in_scope"] is True
     assert result["accumulated_instruction"]
     assert "years_of_experience" in result["accumulated_instruction"].lower()
+
+
+def test_plan_refinement_rejects_out_of_scope():
+    from app.services.pipeline.refine_chat import _normalize_plan_result
+
+    result = _normalize_plan_result(
+        {
+            "in_scope": False,
+            "ready": True,
+            "message": "I only help with extraction fields.",
+            "planned_changes": ["summarize document"],
+            "accumulated_instruction": "Summarize the whole PDF.",
+        },
+        chat_history=[],
+        latest_message="summarize this document for me",
+        field_names=["vendor", "amount"],
+    )
+    assert result["in_scope"] is False
+    assert result["ready"] is False
+    assert result["accumulated_instruction"] == ""
+    assert result["planned_changes"] == []
+    assert "extraction" in result["message"].lower() or "field" in result["message"].lower()
+
+
+def test_plan_refinement_out_of_scope_not_forced_ready_by_clarification_heuristics():
+    from app.services.pipeline.refine_chat import _normalize_plan_result
+
+    chat_history = [
+        {"role": "user", "content": "translate everything"},
+        {
+            "role": "assistant",
+            "content": "Can you specify which field to change?",
+        },
+    ]
+    result = _normalize_plan_result(
+        {
+            "in_scope": False,
+            "ready": False,
+            "message": "Out of scope for extraction refine.",
+            "planned_changes": [],
+            "accumulated_instruction": "",
+        },
+        chat_history=chat_history,
+        latest_message="yes translate the whole file to Spanish please",
+        field_names=["vendor"],
+    )
+    assert result["in_scope"] is False
+    assert result["ready"] is False
+    assert result["accumulated_instruction"] == ""
 
 
 @pytest.mark.asyncio
