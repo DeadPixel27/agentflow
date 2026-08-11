@@ -6,7 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.config import settings
 from app.rate_limit import limiter
@@ -16,6 +16,8 @@ logger = logging.getLogger("api")
 router = APIRouter(prefix="/api/waitlist", tags=["waitlist"])
 
 _memory_waitlist: list[dict[str, Any]] = []
+
+MAX_WAITLIST_FEEDBACK_CHARS = 1000
 
 # Attribution for Pro interest — keep in sync with frontend waitlist-source.ts
 ALLOWED_WAITLIST_SOURCES = frozenset(
@@ -40,6 +42,10 @@ def normalize_waitlist_source(raw: str | None) -> str:
     return value
 
 
+def normalize_waitlist_feedback(raw: str | None) -> str:
+    return (raw or "").strip()
+
+
 def reset_memory_waitlist() -> None:
     """Clear in-memory waitlist (tests only)."""
     _memory_waitlist.clear()
@@ -49,11 +55,17 @@ class WaitlistRequest(BaseModel):
     email: EmailStr
     name: str = ""
     source: str = "normal"
+    feedback: str = Field(default="", max_length=MAX_WAITLIST_FEEDBACK_CHARS)
 
     @field_validator("source", mode="before")
     @classmethod
     def _normalize_source(cls, value: Any) -> str:
         return normalize_waitlist_source(str(value) if value is not None else None)
+
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def _normalize_feedback(cls, value: Any) -> str:
+        return normalize_waitlist_feedback(str(value) if value is not None else None)
 
 
 class WaitlistResponse(BaseModel):
@@ -76,6 +88,17 @@ def _supabase_client():
         return None
 
 
+def _maybe_update_existing_feedback(
+    entry: dict[str, Any],
+    *,
+    feedback: str,
+) -> None:
+    """If the user returns with new feedback, keep the latest non-empty note."""
+    if not feedback:
+        return
+    entry["feedback"] = feedback
+
+
 @router.post("", response_model=WaitlistResponse)
 @limiter.limit(lambda: settings.rate_limit_waitlist)
 async def join_waitlist(
@@ -84,6 +107,7 @@ async def join_waitlist(
 ) -> WaitlistResponse:
     """Add an email to the Pro waitlist. No authentication required."""
     email = str(payload.email).strip().lower()
+    feedback = payload.feedback
     try:
         client = _supabase_client()
 
@@ -98,6 +122,7 @@ async def join_waitlist(
                             prior,
                             payload.source,
                         )
+                    _maybe_update_existing_feedback(entry, feedback=feedback)
                     return WaitlistResponse(
                         message="You're already on the waitlist! We'll reach out soon.",
                         already_joined=True,
@@ -108,10 +133,16 @@ async def join_waitlist(
                     "email": email,
                     "name": payload.name,
                     "source": payload.source,
+                    "feedback": feedback,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
-            logger.info("Waitlist signup (memory): %s (source: %s)", email, payload.source)
+            logger.info(
+                "Waitlist signup (memory): %s (source: %s, feedback_len: %d)",
+                email,
+                payload.source,
+                len(feedback),
+            )
             return WaitlistResponse(
                 message="Thanks! We'll notify you when Pro launches."
             )
@@ -131,6 +162,10 @@ async def join_waitlist(
                     prior,
                     payload.source,
                 )
+            if feedback:
+                client.table("waitlist").update({"feedback": feedback}).eq(
+                    "email", email
+                ).execute()
             return WaitlistResponse(
                 message="You're already on the waitlist! We'll reach out soon.",
                 already_joined=True,
@@ -141,10 +176,16 @@ async def join_waitlist(
                 "email": email,
                 "name": payload.name,
                 "source": payload.source,
+                "feedback": feedback,
             }
         ).execute()
 
-        logger.info("Waitlist signup: %s (source: %s)", email, payload.source)
+        logger.info(
+            "Waitlist signup: %s (source: %s, feedback_len: %d)",
+            email,
+            payload.source,
+            len(feedback),
+        )
         return WaitlistResponse(message="Thanks! We'll notify you when Pro launches.")
 
     except HTTPException:

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ApiError, joinWaitlist } from "@/lib/api";
 import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -19,6 +20,8 @@ import {
   normalizeWaitlistSource,
   type WaitlistSource,
 } from "@/lib/waitlist-source";
+
+const MAX_FEEDBACK_CHARS = 1000;
 
 function PricingCard({
   title,
@@ -91,6 +94,7 @@ function PricingPageInner() {
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(false);
   const [joined, setJoined] = useState(false);
 
@@ -111,6 +115,7 @@ function PricingPageInner() {
         waitlistEmail,
         name.trim() || stored?.name || "",
         source,
+        feedback.trim().slice(0, MAX_FEEDBACK_CHARS),
       );
       setJoined(true);
       toastSuccess(result.message);
@@ -205,6 +210,25 @@ function PricingPageInner() {
                         </div>
                       </>
                     )}
+                    <div className="space-y-1">
+                      <Label htmlFor="waitlist-feedback" className="text-xs">
+                        Anything we should know? (optional)
+                      </Label>
+                      <Textarea
+                        id="waitlist-feedback"
+                        placeholder="e.g. need inbound email for invoices, higher page limits, Sheets automation…"
+                        value={feedback}
+                        onChange={(e) =>
+                          setFeedback(e.target.value.slice(0, MAX_FEEDBACK_CHARS))
+                        }
+                        disabled={loading}
+                        rows={3}
+                        className="min-h-[4.5rem] resize-y text-sm"
+                      />
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        {feedback.length}/{MAX_FEEDBACK_CHARS}
+                      </p>
+                    </div>
                     <Button type="submit" className="w-full" disabled={loading}>
                       {loading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -654,11 +654,17 @@ export async function joinWaitlist(
   email: string,
   name: string = "",
   source: string = "normal",
+  feedback: string = "",
 ): Promise<WaitlistResponse> {
   return request<WaitlistResponse>("/api/waitlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, name, source }),
+    body: JSON.stringify({
+      email,
+      name,
+      source,
+      feedback: feedback.trim(),
+    }),
   });
 }
 
