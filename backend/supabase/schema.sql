@@ -157,6 +157,7 @@ create table if not exists waitlist (
     email text not null,
     name text not null default '',
     source text not null default 'normal',
+    feedback text not null default '',
     created_at timestamptz not null default now()
 );
 

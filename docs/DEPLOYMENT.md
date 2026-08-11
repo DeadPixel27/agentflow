@@ -147,7 +147,7 @@ After changing Vercel env, redeploy so the Next build picks them up.
 
 Not “env files” — dashboard + SQL:
 
-1. Create project → run [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) (or apply numbered migrations in order through at least `013_storage_private.sql`).
+1. Create project → run [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) (or apply numbered migrations in order through at least `015_waitlist_feedback.sql`).
 2. Seed templates if needed: `seed_templates.sql`.
 3. Create **private** Storage buckets: `documents`, `user-templates` (or run `013_storage_private.sql`).
 4. Copy **Project URL** + **secret key** into Railway.

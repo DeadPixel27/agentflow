@@ -124,6 +124,59 @@ def test_waitlist_public_and_dedupes():
     assert second.json()["already_joined"] is True
 
 
+def test_waitlist_stores_optional_feedback(monkeypatch):
+    from app.api.routes import waitlist as waitlist_route
+
+    waitlist_route.reset_memory_waitlist()
+    monkeypatch.setattr(settings, "rate_limit_waitlist", "100/minute")
+    monkeypatch.setattr(
+        "app.api.routes.waitlist._supabase_client",
+        lambda: None,
+    )
+
+    response = client.post(
+        "/api/waitlist",
+        json={
+            "email": "feedback@example.com",
+            "name": "Ada",
+            "source": "pages_exhausted",
+            "feedback": "  Need higher limits for invoices  ",
+        },
+    )
+    assert response.status_code == 200
+    entry = waitlist_route._memory_waitlist[-1]
+    assert entry["feedback"] == "Need higher limits for invoices"
+
+    again = client.post(
+        "/api/waitlist",
+        json={
+            "email": "feedback@example.com",
+            "feedback": "Also want inbound email",
+        },
+    )
+    assert again.status_code == 200
+    assert again.json()["already_joined"] is True
+    assert entry["feedback"] == "Also want inbound email"
+
+
+def test_waitlist_rejects_oversized_feedback(monkeypatch):
+    from app.api.routes import waitlist as waitlist_route
+
+    waitlist_route.reset_memory_waitlist()
+    monkeypatch.setattr(settings, "rate_limit_waitlist", "100/minute")
+    monkeypatch.setattr(
+        "app.api.routes.waitlist._supabase_client",
+        lambda: None,
+    )
+
+    too_long = "x" * 1001
+    response = client.post(
+        "/api/waitlist",
+        json={"email": "long@example.com", "feedback": too_long},
+    )
+    assert response.status_code == 422
+
+
 def test_waitlist_normalizes_legacy_and_feature_sources(monkeypatch):
     from app.api.routes import waitlist as waitlist_route
 

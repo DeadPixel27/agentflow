@@ -269,7 +269,7 @@ Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agent
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`014`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`015`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -401,9 +401,10 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 #### `waitlist`
 | | |
 |---|---|
-| **Purpose** | Pro interest — `source` attribution |
+| **Purpose** | Pro interest — `source` attribution + optional free-text `feedback` |
 | **Unique** | `email` — **no FK** to users |
 | **Sources** | `normal`, `pages_exhausted`, `emails_exhausted`, `sheets_exhausted`, `refines_exhausted`, `inbound_email` (legacy `pricing_page` → `normal`) |
+| **feedback** | Optional note from pricing form (mig `015`, max 1000 chars) |
 
 #### `analytics_events`
 | | |
@@ -429,6 +430,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | 012 | `uploads` registry |
 | 013 | private storage policies |
 | 014 | `workflows.default_sheet_name` |
+| 015 | `waitlist.feedback` |
 
 ---
 
@@ -908,7 +910,7 @@ flowchart LR
   Mailgun --> Railway
 ```
 
-Checklist mindset: apply SQL migrations through **`014`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID`, metering caps), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
+Checklist mindset: apply SQL migrations through **`015`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID`, metering caps), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
 
 See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order. Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md).
 
