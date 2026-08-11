@@ -4,6 +4,7 @@ import { Loader2, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
 import { UploadZone } from "@/components/upload-zone";
 import { Button } from "@/components/ui/button";
 import { ApiError, runWorkflow, uploadFiles } from "@/lib/api";
@@ -24,6 +25,8 @@ export function RerunZone({
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
+  const [showUsageLimit, setShowUsageLimit] = useState(false);
+  const [usageLimitMsg, setUsageLimitMsg] = useState("");
 
   async function handleRerun() {
     if (!files.length) {
@@ -38,9 +41,15 @@ export function RerunZone({
       const run = await runWorkflow(workflowId, upload.upload_id);
       router.push(`/workflows/${workflowId}/runs/${run.run_id}`);
     } catch (e) {
-      toastError(
-        e instanceof ApiError ? e.message : "Failed to run workflow.",
-      );
+      if (e instanceof ApiError && e.status === 429) {
+        toastError(e.message);
+        setUsageLimitMsg(e.message);
+        setShowUsageLimit(true);
+      } else {
+        toastError(
+          e instanceof ApiError ? e.message : "Failed to run workflow.",
+        );
+      }
     } finally {
       setLoading(false);
       setPhase(null);
@@ -70,6 +79,11 @@ export function RerunZone({
           </>
         )}
       </Button>
+      <UsageLimitModal
+        open={showUsageLimit}
+        onClose={() => setShowUsageLimit(false)}
+        message={usageLimitMsg}
+      />
     </div>
   );
 }

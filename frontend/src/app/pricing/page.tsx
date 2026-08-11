@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, joinWaitlist } from "@/lib/api";
+import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { loadStoredUser } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
@@ -137,7 +138,7 @@ function PricingPageInner() {
               title="Free"
               price="$0"
               features={[
-                "50 pages/month",
+                `${FREE_PAGES_PER_MONTH} pages/month`,
                 "All templates (invoice, receipt, contract, etc.)",
                 "Chat refinement",
                 "CSV & JSON export",

@@ -69,6 +69,7 @@ export interface User {
   name: string;
   email: string;
   created_at: string | null;
+  auth_provider?: string | null;
 }
 
 export interface UploadedDocument {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ModalShell } from "@/components/modals/modal-shell";
 import { Button } from "@/components/ui/button";
+import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
 import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 interface UsageLimitModalProps {
@@ -27,7 +28,7 @@ export function UsageLimitModal({
       title="Free limit reached"
       description={
         message ||
-        "You've used all 50 free pages this month. Join the Pro waitlist for unlimited access."
+        `You've used all ${FREE_PAGES_PER_MONTH} free pages this month. Join the Pro waitlist for unlimited access.`
       }
       className="sm:max-w-[420px]"
       footer={
