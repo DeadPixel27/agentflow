@@ -78,6 +78,7 @@ export default function WorkflowSettingsPage() {
       setSheetsUrl(wf.default_sheets_url ?? "");
       setSheetName(wf.default_sheet_name?.trim() || "Results");
     } catch (e) {
+      setWorkflow(null);
       toastError(e instanceof ApiError ? e.message : "Failed to load settings.");
     } finally {
       setLoading(false);
@@ -154,6 +155,29 @@ export default function WorkflowSettingsPage() {
     return (
       <div className="v2-page items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!workflow) {
+    return (
+      <div className="v2-page">
+        <PageHeader title="Workflow Settings" description="Couldn’t load this workflow" />
+        <main className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="mx-auto max-w-[680px] space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This workflow may have been deleted, or you may not have access.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void load()}>
+                Try again
+              </Button>
+              <Link href="/workflows">
+                <Button type="button">Back to workflows</Button>
+              </Link>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -326,9 +350,8 @@ export default function WorkflowSettingsPage() {
 
           <AccountCard title="Danger Zone" danger>
             <p className="text-sm text-muted-foreground">
-              Permanently delete this workflow, its versions, and inbound email
-              configuration. Past run results are kept but unlinked from this
-              workflow.
+              Permanently delete this workflow and its versions. Past run results
+              are kept but unlinked from this workflow.
             </p>
             <Button
               variant="destructive"

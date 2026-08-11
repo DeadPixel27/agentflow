@@ -51,6 +51,9 @@ export default function WorkflowRunResultsPage() {
       saveAction: "version",
       workflowId,
       versionLabel,
+      defaultEmail: workflow?.default_email?.trim() || undefined,
+      defaultSheetsUrl: workflow?.default_sheets_url?.trim() || undefined,
+      defaultSheetName: workflow?.default_sheet_name?.trim() || undefined,
       onVersionSaved: () => {
         router.push(`/workflows/${workflowId}`);
       },

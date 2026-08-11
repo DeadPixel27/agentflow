@@ -30,6 +30,9 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
       for (const file of Array.from(incoming)) {
         const ext = file.name.toLowerCase();
         if (![".pdf", ".png", ".jpg", ".jpeg"].some((e) => ext.endsWith(e))) {
+          toast.error(
+            `"${file.name}" isn’t a supported type. Use PDF, PNG, or JPG.`,
+          );
           continue;
         }
         if (file.size > MAX_UPLOAD_SIZE_BYTES) {
@@ -118,6 +121,7 @@ export function UploadZone({ files, onFilesChange, disabled }: UploadZoneProps) 
                 type="button"
                 className="text-muted-foreground hover:text-foreground ml-2 shrink-0"
                 disabled={disabled}
+                aria-label={`Remove ${f.name}`}
                 onClick={() =>
                   onFilesChange(files.filter((_, idx) => idx !== i))
                 }

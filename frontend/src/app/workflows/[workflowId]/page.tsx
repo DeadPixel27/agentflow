@@ -85,7 +85,6 @@ export default function WorkflowDetailPage() {
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-serif text-lg font-semibold">{workflow.name}</h1>
-              <span className="v2-badge-success">Active</span>
               {versionLabel && (
                 <span className="v2-badge-success">{versionLabel}</span>
               )}
