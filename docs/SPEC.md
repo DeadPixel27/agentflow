@@ -109,7 +109,7 @@ Step 4: Formatter (output: CSV with flag column)
 | **Email delivery** | Resend API | `output.email` agent + `POST /api/runs/{id}/email` | ✅ Done |
 | **Google Sheets** | Service account JSON | `output.google_sheets` agent + `POST /api/runs/{id}/sheets` | ✅ Done |
 | **Inbound email** | Mailgun webhook | Forward to `*@ingest.agentflow.app` → auto-run workflow | ✅ Done |
-| **Code** | GitHub (public repo) | Recruiters will see this | ✅ [kabirrao2002/agentflow](https://github.com/kabirrao2002/agentflow) |
+| **Code** | GitHub (public repo) | Recruiters will see this | ✅ [DeadPixel27/agentflow](https://github.com/DeadPixel27/agentflow) |
 
 ---
 
