@@ -8,7 +8,7 @@
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
-| **Last updated** | 2026-08-10 |
+| **Last updated** | 2026-08-11 |
 
 ---
 
@@ -20,7 +20,7 @@
 4. [Backend layers & agent registry](#4-backend-layers--agent-registry)
 5. [Database — ER & table catalog](#5-database--er--table-catalog)
 6. [Storage model & three-layer templates](#6-storage-model--three-layer-templates)
-7. [Auth & authorization](#7-auth--authorization)
+7. [Auth & authorization](#7-auth--authorization) — providers, session JWT, `doc_token`, ownership
 8. [Metering, caps & rate limits](#8-metering-caps--rate-limits)
 9. [Integrations](#9-integrations)
 10. [Keys & config cheat sheet](#10-keys--config-cheat-sheet)
@@ -33,7 +33,7 @@
 
 ## 1. Elevator pitch & mental model
 
-**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email**, **Google Sheets**, or **inbound email** attachments.
+**What it does:** A user uploads PDFs/images (invoices, receipts, resumes, etc.), picks a **template** or writes a plain-English **task**. The backend **plans** a short agent pipeline (OCR/text → LLM field extract → rules → format), **runs** it asynchronously, and the UI **polls** until structured rows appear. The user can **refine** extraction in chat (creates a versioned child run), **save as a workflow** for reuse, and optionally deliver via **email** or **Google Sheets**. **Inbound email** (Mailgun → workflow address) exists in the API but launch UI gates it behind the Pro waitlist.
 
 **One-line architecture:**
 
@@ -42,8 +42,9 @@
 **Auth gate (important product decision):**
 
 - **Public:** browse template catalog, health, integrations status, waitlist, sign-in endpoints.
-- **Protected:** upload, run, refine, workflows, usage — require app JWT.
-- Unsigned users can select files + template on home; hitting Run opens a **centered sign-in dialog**. After sign-in, pending docs resume automatically (blur overlay → results page). No anonymous LLM spend → metering and telemetry always attach to a `user_id`.
+- **Protected:** upload, run, refine, workflows, usage, document access — require **app JWT** (or a short-lived **doc capability token** for media `<img>`/`<iframe>`).
+- Unsigned users can select files + template on home; hitting Run opens a **centered sign-in dialog** (Google GIS **button**, not One Tap). After sign-in, pending docs resume automatically (blur overlay → results page). No anonymous LLM spend → metering and telemetry always attach to a `user_id`.
+- **Not in codebase:** Supabase Auth on the client, passwords, magic links, or OAuth beyond Google ID-token verify.
 
 **LLM split (cost/quality):**
 
@@ -89,12 +90,13 @@ flowchart TB
   end
 
   subgraph supabase [Supabase]
-    PG["Postgres\n12 app tables"]
-    DocBucket["Storage bucket: documents"]
-    TplBucket["Storage bucket: user-templates"]
+    PG["Postgres\n13 app tables + uploads"]
+    DocBucket["Storage bucket: documents\nprivate"]
+    TplBucket["Storage bucket: user-templates\nprivate"]
   end
 
   UI -->|"REST JSON + Bearer JWT"| Routes
+  UI -->|"doc_token query for media"| Routes
   Services --> OpenAI
   Services --> Groq
   Agents --> OpenAI
@@ -158,15 +160,16 @@ sequenceDiagram
 
 | Stage | HTTP | Backend | Notes |
 |-------|------|---------|-------|
-| Sign-in | `POST /api/auth/google` or `/api/auth/session` | `auth.py`, `jwt.py` | Returns `{ user, token, is_new_user }` |
-| Upload | `POST /api/upload` | `UploadService.process_upload_batch` | Text/OCR at **upload** time; max 10 files; extensions pdf/png/jpg/jpeg |
+| Sign-in | `POST /api/auth/google` or `/api/auth/session` | `auth.py`, `google_tokens.py`, `jwt.py` | Returns `{ user, token, is_new_user, auth_provider }` |
+| Upload | `POST /api/upload` | `UploadService.process_upload_batch` | Text/OCR at **upload** time; max 10 files; `MAX_PAGES_PER_FILE`; registry row in `uploads` |
+| Doc media | `POST .../documents/{id}/access` then `GET ...?doc_token=` | `jwt.create_document_access_token` | Short-lived capability token for `<img>`/`<iframe>` |
 | Plan | inside adhoc / `POST /api/pipeline/create` | `planner.create_plan` | Groq + agent catalog |
 | Template plan | `/api/runs/template` | `TemplateService.build_plan` | Code templates in `app/templates/` |
-| Start run | `/api/runs/*` | `start_run` + `BackgroundTasks` | Returns immediately with `run_id` |
-| Execute | background | `runner.execute_run` | Handlers via `get_handler(agent_type)` |
+| Start run | `/api/runs/*` | `start_run` + `BackgroundTasks` | Check pages → start → **reserve** pages; refund on fail |
+| Execute | background | `runner.execute_run` | Handlers via `get_handler`; `ctx.data` carries `user_id`/`run_id` for outbound agents |
 | Poll | `GET /api/runs/{id}` | ownership check | Frontend `useRunPolling` @ **1500ms** |
-| Refine plan | `POST .../refine/plan` | `refine_chat.plan_refinement` | Clarify intent + preview |
-| Refine apply | `POST .../refine` | `RefineService.refine_and_start` | Child run + `parent_run_id` |
+| Refine plan | `POST .../refine/plan` | `refine_chat.plan_refinement` | Cap check → clarify; `in_scope=false` refuses; ready → page charge then GPT-4o preview |
+| Refine apply | `POST .../refine` | `RefineService.refine_and_start` | Cap + **page reserve before** Groq; child run + `parent_run_id` |
 | Save workflow | `POST /api/workflows/from-run/...` | WorkflowService | Copies plan for reuse |
 
 ### 3.3 Pending-run resume (unsigned → signed)
@@ -195,14 +198,14 @@ flowchart TB
     R3["runs refine email sheets"]
     R4["workflows templates versions"]
     R5["inbound inbound_addresses"]
-    R6["extract pipeline admin health"]
+    R6["extract pipeline admin health integrations"]
   end
 
   subgraph services [Services app/services]
-    S1["auth jwt google"]
+    S1["auth jwt google email_provider"]
     S2["pipeline planner runner refine"]
     S3["documents upload extraction"]
-    S4["usage metering"]
+    S4["usage metering openai_cost"]
     S5["email sheets inbound"]
     S6["llm router openai groq"]
   end
@@ -229,7 +232,7 @@ flowchart TB
 |-------|-----------|----------------|
 | Routes | `backend/app/api/routes/` | HTTP, DI, status codes, map to API models |
 | Dependencies | `backend/app/api/dependencies.py` | `CurrentUserDep`, repo injection |
-| Ownership | `backend/app/api/ownership.py` | `require_self`, `require_workflow_owner`, `require_run_access` |
+| Ownership | `backend/app/api/ownership.py` | `require_self`, `require_workflow_owner`, `require_upload_owner`, `get_owned_upload`, `require_run_access` |
 | Services | `backend/app/services/` | Business logic |
 | Agents | `backend/app/agents/` | One step = one handler |
 | Persistence | `backend/app/persistence/` | Protocols + backends |
@@ -249,8 +252,8 @@ Bootstrap: `import app.agents.handlers` in `main.py` lifespan registers all hand
 | `transform.rules` | `handlers/transforms/rules.py` | Flag / filter / validate rows | No |
 | `transform.pipeline_refiner` | `handlers/transforms/pipeline_refiner.py` | Refine-time plan/prompt rewrite (Groq) | **Yes** |
 | `output.formatter` | `handlers/output/formatter.py` | Shape CSV/JSON/table | No |
-| `output.email` | `handlers/output/email_agent.py` | In-pipeline Resend | No (HTTP) |
-| `output.google_sheets` | `handlers/output/sheets_agent.py` | In-pipeline Sheets push | No (HTTP) |
+| `output.email` | `handlers/output/email_agent.py` | In-pipeline Resend; **reserves** monthly email units | No (HTTP) |
+| `output.google_sheets` | `handlers/output/sheets_agent.py` | In-pipeline Sheets; **reserves** monthly Sheets units | No (HTTP) |
 
 Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agents/core/registry.py`. Planner reads the catalog to choose steps.
 
@@ -266,7 +269,7 @@ Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agent
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`013`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`014`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -274,11 +277,14 @@ Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agent
 
 ```mermaid
 erDiagram
+  users ||--o{ uploads : owns
   users ||--o{ workflows : owns
   users ||--o{ workflow_runs : owns
   users ||--o{ inbound_addresses : owns
   users ||--o{ usage_events : meters
   users ||--o{ analytics_events : emits
+
+  uploads ||--o{ workflow_runs : referenced_by
 
   workflows ||--o{ workflow_steps : has
   workflows ||--o{ workflow_runs : spawned_by
@@ -305,11 +311,20 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 #### `users`
 | | |
 |---|---|
-| **Purpose** | App identity (not Supabase Auth users) |
+| **Purpose** | App identity (**not** Supabase Auth users) |
 | **PK** | `id` uuid |
 | **Columns** | `name`, `email`, `created_at`, `is_admin` |
 | **Indexes** | `idx_users_email` |
-| **Written by** | Auth sign-in / register |
+| **Written by** | Auth sign-in / register (`EmailAuthProvider` upsert by email) |
+| **Auth note** | No password hash column — Google proves the email, or local email auth is passwordless when `AUTH_ALLOW_EMAIL=true` |
+
+#### `uploads`
+| | |
+|---|---|
+| **Purpose** | Registry of an upload batch owned by a user (mig `012`) |
+| **PK** | `id` (matches storage `upload_id`) |
+| **FK** | `user_id` → `users` |
+| **Used by** | Upload ownership checks; runs store the same `upload_id` string |
 
 #### `workflows`
 | | |
@@ -377,16 +392,18 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 #### `usage_events`
 | | |
 |---|---|
-| **Purpose** | Page metering (positive charge + negative refund) |
+| **Purpose** | Metering: **pages** (extraction pool) and **outbound** units (email/Sheets) |
 | **FK** | `user_id` CASCADE; `run_id` SET NULL |
 | **Indexes** | `idx_usage_events_user_month (user_id, created_at)` |
-| **event_type** | default `extraction` |
+| **event_type** | Pages: `extraction`, `refine`, `refine_preview`, `extract_api`, `refund:*`. Outbound: `email_sent`, `sheets_push` (counted separately; **not** in page sum) |
+| **pages column** | For outbound rows, `pages` stores **unit count** (usually 1), not document pages |
 
 #### `waitlist`
 | | |
 |---|---|
-| **Purpose** | Pro interest — `source` attribution: `normal`, `pages_exhausted`, `inbound_email` |
+| **Purpose** | Pro interest — `source` attribution |
 | **Unique** | `email` — **no FK** to users |
+| **Sources** | `normal`, `pages_exhausted`, `emails_exhausted`, `sheets_exhausted`, `refines_exhausted`, `inbound_email` (legacy `pricing_page` → `normal`) |
 
 #### `analytics_events`
 | | |
@@ -424,7 +441,9 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | Local | `DOCUMENT_STORAGE=local` or auto without Supabase | `{UPLOAD_DIR}/{upload_id}/{document_id}.ext` + `manifest.json` |
 | Supabase | `DOCUMENT_STORAGE=supabase` or auto with keys | Bucket `SUPABASE_DOCUMENTS_BUCKET` (default `documents`) |
 
-`upload_id` is a storage key string, **not** a Postgres table. Runs store `upload_id` + `document_ids` jsonb.
+**Registry:** Postgres table `uploads` (mig `012`) owns each batch (`id` = `upload_id`, `user_id`). Runs store `upload_id` + `document_ids` jsonb.
+
+**Privacy:** mig `013` sets Storage buckets `documents` and `user-templates` to **private** (`public=false`). The app serves files only through authenticated routes — never public Storage URLs. Browser `<img>`/`iframe` use a short-lived **`doc_token`** (see §7.6).
 
 ### 6.2 User template payloads
 
@@ -476,116 +495,198 @@ Selected only in `backend/app/persistence/registry.py`:
 
 ## 7. Auth & authorization
 
-### 7.1 Model
+### 7.1 Model (what we ship)
 
-This app does **not** use Supabase Auth on the client. The backend issues its **own JWT** after verifying Google (or optional email).
+This app does **not** use Supabase Auth on the client. Supabase is **Postgres + private Storage** via the **service role** on the server. Identity is an app concern:
+
+1. Prove the human (Google ID token, or optional passwordless email in local/tests).
+2. Upsert a row in the app `users` table.
+3. Issue a short-lived **app JWT** the API owns (`Authorization: Bearer`).
+4. For document **media** only, mint a separate short-lived **capability token** (`doc_token`) so `<img>`/`<iframe>` work without putting the session JWT in a query string.
 
 ```mermaid
 sequenceDiagram
   participant FE as Frontend
   participant GIS as Google_GIS
   participant API as FastAPI
+  participant Prov as EmailAuthProvider
   participant DB as users_table
+  participant JWT as jwt.py
 
-  FE->>GIS: One Tap / button ID token
-  GIS-->>FE: credential JWT from Google
+  FE->>GIS: GIS renderButton continue_with
+  GIS-->>FE: Google ID token credential
   FE->>API: POST /api/auth/google id_token
-  API->>API: verify audience GOOGLE_CLIENT_ID
-  API->>DB: upsert user by email
-  API->>API: create_access_token sub email
-  API-->>FE: app JWT + user
-  FE->>FE: localStorage nexora_access_token
-  FE->>API: Authorization Bearer on API calls
+  API->>API: google_tokens.verify audience GOOGLE_CLIENT_ID
+  Note over API: email_verified required
+  API->>Prov: sign_in_or_register email + name
+  Prov->>DB: get-or-create by email
+  API->>JWT: create_access_token sub=user_id
+  API-->>FE: user + auth_provider=google + app JWT
+  FE->>FE: localStorage token + profile + auth_provider
+  FE->>API: Authorization Bearer on protected calls
 ```
 
-**JWT payload** (`backend/app/services/auth/jwt.py`): `sub` (user_id), `email`, `iat`, `exp`. Signed with `JWT_SECRET_KEY`, algorithm HS256, default expiry **72 hours**.
+**Interview line:** “Google proves email; we own the session JWT and ownership checks. Supabase never sees the browser as an Auth client.”
 
-**Dependency** `get_current_user` (`dependencies.py`):
+### 7.2 Providers & endpoints
 
-1. Read `Authorization: Bearer` or query `access_token` (for `<img>` document URLs)
-2. Decode JWT → load user from repo
-3. Set `request.state.current_user` (also used by rate limiter)
+| Path | Env gate | Behavior |
+|------|----------|----------|
+| `POST /api/auth/google` | `GOOGLE_CLIENT_ID` required | Verify GIS ID token (`google.oauth2.id_token.verify_oauth2_token`), upsert user, return JWT. `auth_provider: "google"`. |
+| `POST /api/auth/session` | `AUTH_ALLOW_EMAIL=true` | Passwordless email+name → upsert → JWT. `auth_provider: "email"`. **403** when disabled (production). |
+| `POST /api/users` | same | Register-only (no JWT). Local/tests; prefer `/auth/session`. |
 
-### 7.2 Public vs protected
+**Frontend GIS:** `google-sign-in-button.tsx` loads `accounts.google.com/gsi/client`, `initialize` + **`renderButton`** (`continue_with`). **Not** One Tap auto-`prompt`. Client ID: `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (must match backend `GOOGLE_CLIENT_ID`).
 
-| Public (no user JWT) | Protected (JWT required) |
-|----------------------|---------------------------|
-| `GET /api/health` | `POST /api/upload`, uploads fetch |
-| `POST /api/auth/google`, `/api/auth/session`* | All `/api/runs/*` |
-| `POST /api/waitlist` | `/api/workflows/*`, versions, settings |
-| `GET /api/templates`, `GET /api/templates/{id}` | `/api/extract`, `/api/pipeline/create` |
-| `POST /api/inbound/email` (Mailgun HMAC) | `/api/inbound-addresses` |
-| Admin routes (`X-Admin-Key`) | `/api/users/me`, `/me/usage` |
-| `POST /api/users`* | email/sheets on a run |
+**Provider registry:** `backend/app/services/auth/registry.py` — `AUTH_BACKEND=email` → `EmailAuthProvider`. Supabase Auth is a **commented future** stub only (`NEXT-STEPS` defers it).
 
-\*Email session + register only if `AUTH_ALLOW_EMAIL=true` (local/tests). Production should keep it **false**.
+**Email provider:** `email_provider.py` — normalize email, get-or-create `users` row. **No password hash**, no magic link.
 
-### 7.3 Frontend session keys
+### 7.3 Session JWT
 
-| localStorage key | Content |
-|------------------|---------|
-| `nexora_access_token` | App JWT |
+| | |
+|--|--|
+| Mint / decode | `backend/app/services/auth/jwt.py` |
+| Secret | `JWT_SECRET_KEY` (**required** to mint), `JWT_ALGORITHM=HS256`, `JWT_EXPIRY_HOURS=72` |
+| Claims | `sub` = **user UUID** (never email), `email`, `iat`, `exp` |
+| Transport | `Authorization: Bearer <token>` only for session auth |
+| Dependency | `get_current_user` / `CurrentUserDep` in `dependencies.py` — rejects missing/invalid tokens; **rejects** document capability tokens used as session JWTs |
+
+There is **no** custom auth middleware. Routes declare `CurrentUserDep`; SlowAPI uses the same Bearer (or IP) for rate-limit keys.
+
+### 7.4 Document capability tokens (`doc_token`)
+
+`<img>` / `<iframe>` cannot set `Authorization` headers. Session JWTs must **not** be passed as query params.
+
+| Step | Detail |
+|------|--------|
+| Mint | `POST /api/uploads/{upload_id}/documents/{document_id}/access` — requires Bearer + upload ownership |
+| Create | `create_document_access_token` — claims: `sub`, `upload_id`, `document_id`, `purpose="doc"`, `iat`, `exp` |
+| TTL | `DOCUMENT_TOKEN_EXPIRY_MINUTES` (default **15**) |
+| Fetch | `GET .../documents/{id}?doc_token=...` via `DocumentFileUserDep` — Bearer **or** valid `doc_token` |
+| Isolation | Session JWT ≠ doc token (purpose check). Query `access_token` is **not** accepted. |
+| FE | `fetchDocumentAccessUrl` in `frontend/src/lib/api.ts` |
+| Tests | `test_document_access_tokens.py`, phase1 auth tests |
+
+### 7.5 Public vs protected
+
+| Public (no user JWT) | Protected (JWT / ownership) |
+|----------------------|------------------------------|
+| `GET /api/health` | `POST /api/upload`, uploads + document access mint |
+| `GET /api/integrations` | All `/api/runs/*` (incl. refine) |
+| `POST /api/auth/google`, `/api/auth/session`* | `/api/workflows/*`, versions, settings |
+| `POST /api/waitlist` | `/api/extract`, `/api/pipeline/create` |
+| `GET /api/templates`, `GET /api/templates/{id}` | `/api/inbound-addresses` |
+| `POST /api/inbound/email` (Mailgun HMAC) | `/api/users/me`, `/me/usage`, profile PATCH |
+| Admin (`X-Admin-Key`) | Manual email/Sheets on a run |
+
+\*Email session + register only if `AUTH_ALLOW_EMAIL=true`. Production keeps it **false**.
+
+### 7.6 Frontend session storage
+
+| Key | Content |
+|-----|---------|
+| `nexora_access_token` | App JWT (`api.ts`) |
 | `nexora_user_id` | uuid |
 | `nexora_user_name` | display name |
 | `nexora_user_email` | email |
+| `nexora_auth_provider` | `google` \| `email` (account copy; set on sign-in) |
 
-On 401 with a sent token: clear session, dispatch `nexora:session-expired` → `SignInProvider` opens dialog (`api.ts` + `use-sign-in.tsx`).
+Pending-run (unsigned → signed): `sessionStorage` + IndexedDB `nexora_pending_run` (`pending-run.ts`).
 
-### 7.4 Ownership
+On **401** with a sent token: clear session keys, dispatch `nexora:session-expired` → `SignInProvider` opens dialog.
 
-- `require_self` — user can only access own user_id resources  
-- `require_workflow_owner` — workflow.user_id must match  
-- `require_run_access` — run.user_id / workflow ownership  
+`ensureUser()` (`user-session.ts`): if email auth allowed and no session, may auto-mint `anon-…@local.dev` for local DX; production (email auth off) throws `SignInRequiredError` → modal.
 
-### 7.5 Rate-limit identity
+### 7.7 Ownership
 
-`backend/app/rate_limit.py`: if JWT present → key `user:{user_id}`, else client IP. Applied to upload + run/refine endpoints via slowapi.
+`backend/app/api/ownership.py`:
+
+| Helper | Rule |
+|--------|------|
+| `require_self` | Path `user_id` must match JWT user |
+| `require_workflow_owner` | `workflow.user_id` match |
+| `require_upload_owner` / `get_owned_upload` | `uploads.user_id` match |
+| `require_run_access` | `resolve_run_owner_id`: run.user_id → workflow owner → usage_events fallback |
+
+Cross-user run access → **403**.
+
+### 7.8 Rate-limit identity
+
+`backend/app/rate_limit.py`: Bearer JWT → key `user:{user_id}`, else client IP. Applied to upload + run/refine (and related) via SlowAPI.
+
+### 7.9 Explicitly not implemented
+
+- Supabase Auth (password / magic link / hosted OAuth UI)
+- Passwords or refresh-token rotation
+- GIS One Tap auto-prompt
+- Putting session JWTs in query strings for media
 
 ---
 
 ## 8. Metering, caps & rate limits
 
+Hard caps (fail-closed). Soft UI warnings (e.g. account amber bar) never allow spend past these gates.
+
 | Cap | Env default | HTTP | Meaning |
 |-----|-------------|------|---------|
-| Monthly pages / user | `FREE_PAGE_LIMIT_MONTHLY=50` | **429** | Sum of `usage_events.pages` this month |
-| Refines / run lineage | `MAX_REFINES_PER_RUN=10` | **429** | Count refine children |
-| Global pages / day | `GLOBAL_DAILY_PAGE_LIMIT=100` | **503** | Budget protection across all users |
-| OpenAI $ / day (est.) | `OPENAI_DAILY_BUDGET_USD=1.0` | fail extract | Token-based estimate; `0` disables |
+| Monthly pages / user | `FREE_PAGE_LIMIT_MONTHLY=50` | **429** | Sum of **page** `usage_events` this month |
+| Refines / run lineage | `MAX_REFINES_PER_RUN=10` | **429** | Enforced on **plan and apply** |
+| Emails / month | `FREE_EMAIL_LIMIT_MONTHLY=20` | **429** | `email_sent` units (HTTP + agents + workflow delivery) |
+| Sheets / month | `FREE_SHEETS_LIMIT_MONTHLY=20` | **429** | `sheets_push` units |
+| Global pages / day (UTC) | `GLOBAL_DAILY_PAGE_LIMIT=100` | **503** | Cross-user budget brake |
+| OpenAI $ / day (est.) | `OPENAI_DAILY_BUDGET_USD=1.0` | fail extract | Token estimate in `openai_cost.py` / `openai_client.py`; `0` disables; **in-process** (single-replica) |
+| Pages / file | `MAX_PAGES_PER_FILE=10` | upload reject | Client + server; not the monthly pool |
+| Files / upload | hardcoded 10 | 400 | `upload_service` |
 | Adhoc/template/refine rate | `RATE_LIMIT_RUNS_ADHOC=10/minute` | 429 slowapi | Abuse throttle |
 | Upload rate | `RATE_LIMIT_UPLOAD=20/minute` | 429 slowapi | |
+| Refine plan rate | `RATE_LIMIT_REFINE_PLAN` | 429 slowapi | |
 
-**Flow:** before starting a run, `enforce_upload_usage` / `check_usage_allowed` counts PDF pages (PyMuPDF) or 1 per image → if OK, `record_usage` → on failed `execute_run`, `refund_usage_for_run` (negative pages row).
+**Page flow:** `enforce_upload_usage` (check) → `start_run` → `reserve_page_usage` / `charge_run_pages` (check+record under locks) → on failed execute, `refund_usage_for_run` (negative row).
 
-Code: `backend/app/services/usage/metering.py`, `backend/app/api/usage_http.py`.
+**Refine:**
+- Plan: `check_refine_allowed` first; out-of-scope → `in_scope=false`, **no** GPT-4o preview charge.
+- Ready preview / apply: reserve pages **before** expensive LLM; refund on failure.
 
-Frontend: `UsageLimitModal` on 429; toast on 503.
+**Outbound:** `reserve_email_usage` / `reserve_sheets_usage` before Resend/Sheets; agents use `ctx.data.user_id`; workflow defaults skip + log when over cap.
+
+**Summary API:** `GET /api/users/me/usage` → pages + emails + sheets used/limits + `resets_at`.
+
+Code: `metering.py`, `usage_http.py`, `openai_cost.py`. Frontend: `UsageLimitModal` on 429 (no duplicate toast); toast on 503; waitlist `source` from limit message (`waitlist-source.ts`).
 
 ---
 
 ## 9. Integrations
 
+### Status probe
+
+`GET /api/integrations` (**public**): `email_configured`, `sheets_configured`, `sheets_share_email` (service account `client_email`), `inbound_email_domain`. Powers Account + Sheets share hint UI.
+
 ### Outbound email (Resend)
 
 - Keys: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- Manual: `POST /api/runs/{run_id}/email`
+- Manual: `POST /api/runs/{run_id}/email` — reserve email unit first
 - Auto: workflow `default_email` via `deliver_workflow_defaults` after successful run
-- Agent: `output.email`
+- Agent: `output.email` — same monthly reserve; needs `user_id` on run context
 
 ### Google Sheets
 
 - Key: `GOOGLE_SERVICE_ACCOUNT_JSON` (path or raw JSON)
-- Manual: `POST /api/runs/{run_id}/sheets`
+- Manual: `POST /api/runs/{run_id}/sheets` — reserve Sheets unit first
 - Auto: workflow `default_sheets_url` + optional `default_sheet_name` (defaults to `Results`)
-- Agent: `output.google_sheets`
-- **User setup:** share the spreadsheet with the service account `client_email` as **Editor**. UI exposes that address via `GET /api/integrations` (`sheets_share_email`) and shows a walkthrough on Workflow Settings + the Sheets export modal.
+- Agent: `output.google_sheets` — same monthly reserve
+- **User setup:** share the spreadsheet with the service account `client_email` as **Editor**. UI: `SheetsShareHint` + Workflow Settings + export modal (`GET /api/integrations`).
 
 ### Inbound email (Mailgun)
 
 - `INBOUND_EMAIL_DOMAIN` (e.g. `ingest.nexora.app`)
 - `INBOUND_WEBHOOK_SECRET` — HMAC verify; empty secret rejects webhooks
-- **User setup (launch UI):** Workflow Settings explains inbound as a Pro feature and CTAs to `/pricing?source=inbound_email` (waitlist attribution). Creating live addresses is deferred until Pro/Mailgun go live; backend CRUD + webhook remain.
-- Mailgun `POST /api/inbound/email` → save attachments → start that workflow’s run
-- Settings page lists steps: create address → email/forward with PDF/PNG/JPG attachments
+- **Launch product:** Workflow Settings CTAs to `/pricing?source=inbound_email` (Pro waitlist). **No** create-address UI yet.
+- **Backend still live:** CRUD `/api/inbound-addresses` + `POST /api/inbound/email` (HMAC → attachments → metered workflow run) for when Pro/Mailgun go live.
+
+### Waitlist
+
+`POST /api/waitlist` — sources in §5.2; frontend `pricingHref` / `waitlistSourceFromLimitMessage`.
 
 ---
 
@@ -605,7 +706,8 @@ Frontend: `UsageLimitModal` on 429; toast on 503.
 | `OPENAI_FALLBACK_MODELS` | Fallback | `gpt-4o-mini` |
 | `JWT_SECRET_KEY` | Sign app JWTs | long random; **required to mint tokens** |
 | `JWT_ALGORITHM` | | `HS256` |
-| `JWT_EXPIRY_HOURS` | | `72` |
+| `JWT_EXPIRY_HOURS` | Session JWT TTL | `72` |
+| `DOCUMENT_TOKEN_EXPIRY_MINUTES` | Media capability token TTL | `15` |
 | `GOOGLE_CLIENT_ID` | Verify GIS ID tokens (audience) | same as frontend public client id |
 | `AUTH_ALLOW_EMAIL` | Passwordless email sign-in | `false` in prod |
 | `AUTH_BACKEND` | Provider registry | `email` |
@@ -621,18 +723,23 @@ Frontend: `UsageLimitModal` on 429; toast on 503.
 | `MAX_UPLOAD_SIZE_MB` | | `10` |
 | `MAX_PAGES_PER_FILE` | | `10` |
 | `FREE_PAGE_LIMIT_MONTHLY` | | `50` |
+| `FREE_EMAIL_LIMIT_MONTHLY` | Outbound email units | `20` |
+| `FREE_SHEETS_LIMIT_MONTHLY` | Outbound Sheets units | `20` |
 | `MAX_REFINES_PER_RUN` | | `10` |
 | `GLOBAL_DAILY_PAGE_LIMIT` | | `100` |
-| `OPENAI_DAILY_BUDGET_USD` | | `1.0` (`0` = off) |
+| `OPENAI_DAILY_BUDGET_USD` | Hard estimated gate | `1.0` (`0` = off) |
 | `OCR_ENGINE` | `rapidocr` \| `tesseract` | `rapidocr` |
 | `USE_LAYOUT_PRESERVATION` | Docling for digital PDFs | `true` |
 | `CORS_ORIGINS` | Comma-separated | `http://localhost:3000` |
 | `RATE_LIMIT_RUNS_ADHOC` | slowapi string | `10/minute` |
 | `RATE_LIMIT_UPLOAD` | | `20/minute` |
+| `RATE_LIMIT_REFINE_PLAN` | | `20/minute` |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Email | optional |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Sheets | optional |
 | `INBOUND_EMAIL_DOMAIN` | | `ingest.nexora.app` |
 | `INBOUND_WEBHOOK_SECRET` | Mailgun signing | required if inbound on |
+| `INBOUND_WEBHOOK_MAX_AGE_SECONDS` | Replay window | see config |
+| `ORPHAN_RECLAIM_ON_STARTUP` / `ORPHAN_RUN_STALE_MINUTES` | Stuck BackgroundTasks | launch posture |
 | `ADMIN_API_KEY` | `X-Admin-Key` header | optional |
 
 Hardcoded in settings: `allowed_extensions` = `{.pdf,.png,.jpg,.jpeg}`.
@@ -675,17 +782,23 @@ frontend/src/app/
 
 | Module | Role |
 |--------|------|
-| `lib/api.ts` | Typed fetch, Bearer JWT, `ApiError`, all endpoints |
-| `lib/user-session.ts` | localStorage session, `ensureUser`, Google/email helpers |
+| `lib/api.ts` | Typed fetch, Bearer JWT, `ApiError`, `fetchDocumentAccessUrl`, all endpoints |
+| `lib/user-session.ts` | localStorage session (+ `auth_provider`), `ensureUser`, Google/email helpers |
 | `lib/pending-run.ts` | Persist mid-run intent across sign-in |
 | `lib/resume-pending-run.ts` | Claim + upload + start run |
+| `lib/free-plan.ts` | UI constants for free page/email/Sheets limits |
+| `lib/waitlist-source.ts` | Waitlist `source` + 429 → attribution |
+| `lib/upload-limits.ts` | Client max size/pages (must match backend) |
 | `hooks/use-user.tsx` | Shared user for nav badge |
 | `hooks/use-sign-in.tsx` | Global modal + processing overlay + resume |
 | `hooks/use-run-polling.ts` | Poll every 1.5s while `running` |
+| `components/google-sign-in-button.tsx` | GIS `renderButton` |
 | `components/modals/sign-in-modal.tsx` | Google + optional email |
+| `components/modals/usage-limit-modal.tsx` | Hard-cap 429 UX |
 | `components/modals/processing-overlay.tsx` | Blur “Processing your request…” |
-| `components/refine-chat.tsx` | Chat refine UX |
-| `components/export-bar.tsx` | Save workflow / email / Sheets |
+| `components/sheets-share-hint.tsx` | Service-account Editor email |
+| `components/refine-chat.tsx` | Plan Mode refine UX (`in_scope` / Apply) |
+| `components/export-bar.tsx` | Save workflow / email / Sheets (prefills workflow defaults) |
 
 ### How a home run starts
 
@@ -703,25 +816,35 @@ frontend/src/app/
 |----------|------|
 | App boot, middleware, routers | `backend/app/main.py` |
 | All env settings | `backend/app/config.py` |
-| Mint / verify JWT | `backend/app/services/auth/jwt.py` |
+| Mint / verify session JWT | `backend/app/services/auth/jwt.py` |
+| Document capability tokens | `jwt.create_document_access_token` + `uploads` routes |
 | Google ID token verify | `backend/app/services/auth/google_tokens.py` |
+| Email/passwordless provider | `backend/app/services/auth/email_provider.py` |
+| Auth provider registry | `backend/app/services/auth/registry.py` |
 | Auth HTTP routes | `backend/app/api/routes/auth.py` |
 | Current user dependency | `backend/app/api/dependencies.py` |
 | Ownership checks | `backend/app/api/ownership.py` |
+| Rate-limit identity | `backend/app/rate_limit.py` |
 | Upload + text extract | `backend/app/services/documents/upload_service.py` |
 | Planner (Groq) | `backend/app/services/pipeline/planner.py` |
 | Background runner | `backend/app/services/pipeline/runner.py` |
+| Refine plan (scope) | `backend/app/services/pipeline/refine_chat.py` |
 | Refine apply | `backend/app/services/pipeline/refine_service.py` |
 | LLM routing OpenAI vs Groq | `backend/app/services/llm/router.py` |
+| OpenAI $ budget gate | `backend/app/services/llm/openai_cost.py` |
 | Field extraction | `backend/app/services/extraction/field_extractor.py` + agent handler |
-| Page metering | `backend/app/services/usage/metering.py` |
+| Page + outbound metering | `backend/app/services/usage/metering.py` |
+| HTTP usage helpers | `backend/app/api/usage_http.py` |
+| Integrations status | `backend/app/api/routes/integrations.py` |
 | Persistence switch | `backend/app/persistence/registry.py` |
 | Agent register API | `backend/app/agents/core/registry.py` |
 | Master templates | `backend/app/templates/` |
 | SQL schema | `backend/supabase/schema.sql` |
 | Home + pending run UI | `frontend/src/app/page.tsx` |
 | Sign-in dialog orchestration | `frontend/src/hooks/use-sign-in.tsx` |
-| API client + JWT | `frontend/src/lib/api.ts` |
+| GIS button | `frontend/src/components/google-sign-in-button.tsx` |
+| Session + ensureUser | `frontend/src/lib/user-session.ts` |
+| API client + JWT + doc URLs | `frontend/src/lib/api.ts` |
 | Run polling | `frontend/src/hooks/use-run-polling.ts` |
 
 ---
@@ -729,7 +852,13 @@ frontend/src/app/
 ## 13. Interview FAQ
 
 **Q: Why your own JWT instead of Supabase Auth?**  
-A: Supabase is used as **Postgres + Storage** with the **service role** on the server. Identity is a thin app concern: Google verifies the human, we upsert a `users` row and issue a short-lived HS256 JWT the API owns. Keeps the frontend simple (Bearer header) and works with memory backend in tests without Supabase Auth.
+A: Supabase is used as **Postgres + private Storage** with the **service role** on the server. Identity is a thin app concern: Google verifies the human (`email_verified`), we upsert a `users` row via `EmailAuthProvider`, and issue a short-lived HS256 JWT (`sub` = user UUID) the API owns. Keeps the frontend simple (Bearer header), works with the memory backend in tests, and avoids coupling the browser to Supabase Auth. Password / magic-link Supabase Auth is deferred.
+
+**Q: Google button vs One Tap?**  
+A: We use GIS **`renderButton`** (`continue_with`) only — no auto One Tap prompt. Same Web client ID on FE (`NEXT_PUBLIC_GOOGLE_CLIENT_ID`) and BE (`GOOGLE_CLIENT_ID`) for audience verification.
+
+**Q: How do document previews authenticate?**  
+A: Mint `POST .../documents/{id}/access` with the session Bearer → short-lived JWT with `purpose=doc` → `GET ...?doc_token=`. Session JWTs are **not** accepted as query tokens; doc tokens cannot act as session auth.
 
 **Q: Why both Groq and OpenAI?**  
 A: Extraction quality matters most for invoices/receipts → GPT-4o. Planning and refine chat are latency/cost sensitive → Groq. Router: `LLMTask.EXTRACTION` vs `PLANNER` / `REFINER` / `PLAN_MODE`.
@@ -738,31 +867,28 @@ A: Extraction quality matters most for invoices/receipts → GPT-4o. Planning an
 A: Upload path materializes text once; planner/runner reuse cached document text (`cached_documents` on refine). Faster iterations and fewer OCR passes.
 
 **Q: What happens on refine?**  
-A: User message → refine plan/preview → `pipeline_refiner` rewrites plan/prompt → new `user_template_versions` row + storage blob → **child** `workflow_runs` with `parent_run_id`. Original run immutable. Cap: `MAX_REFINES_PER_RUN`.
+A: Plan Mode clarifies (`in_scope` gate) → optional GPT-4o preview (pages charged first) → Apply reserves pages, runs Groq `pipeline_refiner`, starts **child** `workflow_runs` with `parent_run_id` + version blob. Original run immutable. Cap: `MAX_REFINES_PER_RUN` on both plan and apply.
 
 **Q: How do you stop free-tier abuse?**  
-A: No anonymous runs (JWT before upload). Monthly page meter per user, global daily cap, refine cap, slowapi per-user rate limits, refund on failed runs.
+A: No anonymous runs (JWT before upload). Monthly page meter, email/Sheets outbound meters, refine cap, global daily page cap, OpenAI daily $ estimate, per-file page limit, slowapi per-user rate limits, refunds on failed runs/previews. UI: hard 429 → `UsageLimitModal`.
 
 **Q: What’s public without login?**  
-A: Health, auth endpoints, waitlist, **template catalog**. Not uploads/runs.
+A: Health, integrations status, auth endpoints, waitlist, **template catalog**. Not uploads/runs/document bytes.
 
 **Q: Memory vs Supabase?**  
 A: `PERSISTENCE_BACKEND=auto` uses Supabase when URL+secret set, else in-memory (tests/dev, data lost on restart). Same service code via repository protocols.
 
 **Q: How does inbound email work?**  
-A: User binds `flow-…@INBOUND_EMAIL_DOMAIN` to a workflow. Mailgun signs webhook; backend verifies HMAC, stores attachments as an upload, starts that workflow’s run as the owning user.
+A: **Product (launch):** waitlist CTA (`source=inbound_email`). **Backend:** user can still bind `flow-…@INBOUND_EMAIL_DOMAIN` via API; Mailgun HMAC webhook stores attachments and starts the workflow as the owning user (metered).
 
 **Q: Where do refined prompts live?**  
-A: Not only in Postgres. Metadata in `user_template_versions`; full payload in `user-templates` storage under `storage_key`. Master templates stay in code.
+A: Not only in Postgres. Metadata in `user_template_versions`; full payload in private `user-templates` storage under `storage_key`. Master templates stay in code.
 
 **Q: How does the UI know a run finished?**  
 A: `GET /api/runs/{id}` polled every 1.5s while `status === "running"` (`useRunPolling`). No websockets yet.
 
 **Q: Sign-in dialog vs account page?**  
-A: Run/sample/nav Sign in → modal + optional pending resume. `/account` is for signed-in settings/usage/integrations. Expired JWT clears storage and re-opens the modal via custom event.
-
-**Q: Document URL with images?**  
-A: Some GETs append `?access_token=` because `<img>` cannot set Authorization headers; dependency accepts query token.
+A: Run/sample/nav Sign in → modal + optional pending resume. `/account` is for signed-in settings/usage (pages + emails + Sheets)/integrations. Expired JWT clears storage and re-opens the modal via custom event. Account copy uses stored `auth_provider`.
 
 **Q: Soft delete / cascade?**  
 A: Deleting a user cascades workflows, inbound addresses, usage. Deleting a workflow cascades steps and inbound addresses; runs’ `workflow_id` SET NULL. Version delete cascades refinement_events.
@@ -782,7 +908,7 @@ flowchart LR
   Mailgun --> Railway
 ```
 
-Checklist mindset: apply SQL migrations / `schema.sql`, create Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway, set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google client ID for the production origin, keep `AUTH_ALLOW_EMAIL=false`.
+Checklist mindset: apply SQL migrations through **`014`** / `schema.sql`, create **private** Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway (incl. `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID`, metering caps), set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google OAuth authorized origins for the production origin, keep `AUTH_ALLOW_EMAIL=false`, smoke Google sign-in → upload → run → cross-user 403 → 429 UI.
 
 See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order. Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md).
 
