@@ -26,7 +26,6 @@ function WorkflowCard({
   onDeleted: (workflowId: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
-  const steps = Array.from({ length: workflow.step_count }, (_, i) => `S${i + 1}`);
 
   async function handleDelete(event: React.MouseEvent) {
     event.preventDefault();
@@ -74,7 +73,6 @@ function WorkflowCard({
               <Trash2 className="h-3.5 w-3.5" />
             )}
           </Button>
-          <span className="v2-badge-muted">Active</span>
         </div>
       </div>
       <h2 className="text-sm font-bold leading-snug">{workflow.name}</h2>
@@ -83,18 +81,8 @@ function WorkflowCard({
       </p>
       <div className="mt-auto pt-4 border-t border-border flex items-center justify-between gap-2">
         <span className="text-[10px] text-muted-foreground">
-          {workflow.step_count} steps
+          {workflow.step_count} {workflow.step_count === 1 ? "step" : "steps"}
         </span>
-        <div className="flex flex-wrap gap-1 justify-end">
-          {steps.slice(0, 4).map((s, i) => (
-            <span
-              key={i}
-              className="rounded px-1.5 py-0.5 text-[9px] font-medium bg-surface-2"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
       </div>
     </Link>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ModalShell } from "@/components/modals/modal-shell";
 import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
@@ -17,6 +17,7 @@ interface SheetsModalProps {
   onClose: () => void;
   runId: string;
   defaultUrl?: string;
+  defaultSheetName?: string;
 }
 
 export function SheetsModal({
@@ -24,12 +25,19 @@ export function SheetsModal({
   onClose,
   runId,
   defaultUrl = "",
+  defaultSheetName = "Results",
 }: SheetsModalProps) {
   const [url, setUrl] = useState(defaultUrl);
-  const [sheetName, setSheetName] = useState("Results");
+  const [sheetName, setSheetName] = useState(defaultSheetName || "Results");
   const [loading, setLoading] = useState(false);
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const [usageLimitMsg, setUsageLimitMsg] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setUrl(defaultUrl || "");
+    setSheetName(defaultSheetName?.trim() || "Results");
+  }, [open, defaultUrl, defaultSheetName]);
 
   async function handlePush() {
     if (!url.trim()) {

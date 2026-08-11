@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ModalShell } from "@/components/modals/modal-shell";
 import { UsageLimitModal } from "@/components/modals/usage-limit-modal";
@@ -24,6 +24,11 @@ export function EmailModal({ open, onClose, runId, defaultTo = "" }: EmailModalP
   const [loading, setLoading] = useState(false);
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const [usageLimitMsg, setUsageLimitMsg] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setTo(defaultTo || "");
+  }, [open, defaultTo]);
 
   async function handleSend() {
     if (!to.trim()) {

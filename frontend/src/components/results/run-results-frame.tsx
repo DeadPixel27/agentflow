@@ -294,12 +294,14 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
           workflowId={pageConfig.workflowId ?? displayRun.workflow_id ?? undefined}
           defaultEmail={pageConfig.defaultEmail}
           defaultSheetsUrl={pageConfig.defaultSheetsUrl}
+          defaultSheetName={pageConfig.defaultSheetName}
           onWorkflowSaved={pageConfig.onWorkflowSaved}
           onVersionSaved={pageConfig.onVersionSaved}
         />
       )}
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+        <div className="flex flex-1 min-h-0 min-w-0">
         {showDocsPanel && (
           <DocsPanel
             files={files}
@@ -360,6 +362,7 @@ export function RunResultsFrame({ refinePanel }: RunResultsFrameProps) {
               />
             </div>
           )}
+        </div>
         </div>
         {refinePanel}
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -24,13 +25,47 @@ function initials(name: string): string {
   return (parts[0]?.[0] ?? "A").toUpperCase();
 }
 
+function NavLink({
+  href,
+  label,
+  pathname,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const active =
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={cn(
+        "rounded-md px-3 py-1.5 text-[13px] transition-colors",
+        active
+          ? "bg-surface-hover font-semibold text-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-surface-hover/60",
+      )}
+    >
+      {label}
+    </Link>
+  );
+}
+
 export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, setUser } = useUser();
   const { openSignIn } = useSignIn();
   const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {
@@ -46,6 +81,7 @@ export function NavBar() {
     clearStoredUser();
     setUser(null);
     setOpen(false);
+    setMobileOpen(false);
     toastSuccess("Signed out.");
     router.push("/");
   }
@@ -53,7 +89,7 @@ export function NavBar() {
   return (
     <header className="shrink-0 border-b border-border bg-card/90 backdrop-blur-sm z-50">
       <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 min-w-0">
           <Link href="/" className="flex items-center gap-2.5 shrink-0">
             <span
               className="flex h-[26px] w-[26px] items-center justify-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground"
@@ -64,84 +100,99 @@ export function NavBar() {
             <span className="text-sm font-semibold tracking-tight">Nexora</span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
-            {NAV_LINKS.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-[13px] transition-colors",
-                    active
-                      ? "bg-surface-hover font-semibold text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-surface-hover/60",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            {NAV_LINKS.map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                pathname={pathname}
+              />
+            ))}
           </nav>
         </div>
 
-        <div className="relative" ref={menuRef}>
-          {user ? (
-            <>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="sm:hidden flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((value) => !value)}
+          >
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
+
+          <div className="relative" ref={menuRef}>
+            {user ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setOpen((value) => !value)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
+                  aria-label="Account menu"
+                  aria-expanded={open}
+                >
+                  {initials(user.name)}
+                </button>
+                {open && (
+                  <div className="absolute right-0 top-full mt-2 w-52 rounded-lg border border-border bg-card py-1 shadow-lg z-50">
+                    <div className="px-3 py-2 border-b border-border">
+                      <p className="text-[13px] font-semibold truncate">{user.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                    <Link
+                      href="/account"
+                      className="block w-full px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      Account Settings
+                    </Link>
+                    <Link
+                      href="/account#integrations"
+                      className="block w-full px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      onClick={() => setOpen(false)}
+                    >
+                      Integrations
+                    </Link>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted"
+                      onClick={handleSignOut}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={() => setOpen((value) => !value)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
-                aria-label="Account menu"
+                onClick={openSignIn}
+                className="text-[13px] font-medium text-primary hover:underline"
               >
-                {initials(user.name)}
+                Sign in
               </button>
-              {open && (
-                <div className="absolute right-0 top-full mt-2 w-52 rounded-lg border border-border bg-card py-1 shadow-lg z-50">
-                  <div className="px-3 py-2 border-b border-border">
-                    <p className="text-[13px] font-semibold truncate">{user.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {user.email}
-                    </p>
-                  </div>
-                  <Link
-                    href="/account"
-                    className="block w-full px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    onClick={() => setOpen(false)}
-                  >
-                    Account Settings
-                  </Link>
-                  <Link
-                    href="/account#integrations"
-                    className="block w-full px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    onClick={() => setOpen(false)}
-                  >
-                    Integrations
-                  </Link>
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted"
-                    onClick={handleSignOut}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={openSignIn}
-              className="text-[13px] font-medium text-primary hover:underline"
-            >
-              Sign in
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
+      {mobileOpen && (
+        <nav className="sm:hidden border-t border-border px-4 py-3 flex flex-col gap-1 bg-card">
+          {NAV_LINKS.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              pathname={pathname}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          ))}
+        </nav>
+      )}
     </header>
   );
 }

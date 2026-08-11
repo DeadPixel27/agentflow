@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Loader2, Play, X } from "lucide-react";
+import { ArrowRight, Loader2, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -19,6 +19,7 @@ import {
   uploadFiles,
   type PipelineTemplateSummary,
 } from "@/lib/api";
+import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
 import { savePendingRun } from "@/lib/pending-run";
 import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError } from "@/lib/toast";
@@ -60,10 +61,6 @@ export default function HomePage() {
     } catch {
       /* keep current task */
     }
-  }
-
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   const promptSignIn = useCallback(
@@ -242,33 +239,12 @@ export default function HomePage() {
               <em className="text-primary not-italic">any document</em>
             </h1>
             <p className="text-sm text-muted-foreground max-w-[520px] mx-auto">
-              Upload invoices, receipts, reports — or forward them via email. AI
-              extracts fields and returns structured JSON or CSV.
+              Upload invoices, receipts, or reports. AI extracts fields and
+              returns structured JSON or CSV.
             </p>
           </div>
 
           <UploadZone files={files} onFilesChange={setFiles} disabled={loading} />
-
-          {files.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {files.map((file, index) => (
-                <span
-                  key={`${file.name}-${index}`}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1 text-xs font-medium"
-                >
-                  {file.name}
-                  <button
-                    type="button"
-                    onClick={() => removeFile(index)}
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
 
           {templates.length > 0 && (
             <div className="space-y-3">
@@ -343,7 +319,7 @@ export default function HomePage() {
           </div>
 
           <p className="text-center text-xs text-muted-foreground pt-2">
-            50 pages free · Results in seconds
+            {FREE_PAGES_PER_MONTH} pages free · Results in seconds
           </p>
         </div>
       </main>

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/use-user";
 import { ApiError, getIntegrationsStatus, getUserUsage, updateMyProfile, type IntegrationsStatus, type UsageSummary } from "@/lib/api";
+import { FREE_PAGES_PER_MONTH } from "@/lib/free-plan";
 import { hasPendingRun } from "@/lib/pending-run";
 import { resumePendingRun } from "@/lib/resume-pending-run";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -23,6 +24,7 @@ import {
   signInWithGoogle,
 } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
+import { pricingHref, WAITLIST_SOURCES } from "@/lib/waitlist-source";
 
 function AccountCard({
   title,
@@ -96,6 +98,7 @@ export default function AccountPage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationsStatus | null>(null);
   const allowEmailAuth = isEmailAuthAllowed();
+  const authProvider = user?.auth_provider;
 
   useEffect(() => {
     if (user) {
@@ -326,12 +329,12 @@ export default function AccountPage() {
                 <p className="text-xs text-muted-foreground">
                   {usage?.resets_at
                     ? `Resets ${new Date(usage.resets_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                    : "50 pages/month"}
+                    : `${usage?.pages_limit ?? FREE_PAGES_PER_MONTH} pages/month`}
                 </p>
               </div>
-              <Link href="/pricing">
+              <Link href={pricingHref(WAITLIST_SOURCES.normal)}>
                 <Button size="sm" variant="outline">
-                  Upgrade →
+                  Join Pro waitlist
                 </Button>
               </Link>
             </div>
@@ -339,13 +342,13 @@ export default function AccountPage() {
               <UsageBar
                 label="Pages extracted"
                 used={usage?.pages_used ?? 0}
-                limit={usage?.pages_limit ?? 50}
+                limit={usage?.pages_limit ?? FREE_PAGES_PER_MONTH}
               />
             </div>
             {usage && usage.pages_used >= usage.pages_limit && (
               <p className="text-xs text-amber-600 font-medium">
                 You&apos;ve hit your free limit.{" "}
-                <Link href="/pricing?source=pages_exhausted" className="underline">
+                <Link href={pricingHref(WAITLIST_SOURCES.pagesExhausted)} className="underline">
                   Join the Pro waitlist
                 </Link>{" "}
                 for unlimited access.
@@ -364,7 +367,11 @@ export default function AccountPage() {
                   {user.email || "—"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Signed in with Google · email can’t be changed here
+                  {authProvider === "google"
+                    ? "Signed in with Google · email can’t be changed here"
+                    : authProvider === "email" || allowEmailAuth
+                      ? "Signed in with email"
+                      : "Signed in · email can’t be changed here"}
                 </p>
               </div>
             </div>

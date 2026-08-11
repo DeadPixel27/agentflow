@@ -19,6 +19,7 @@ interface ExportBarProps {
   workflowId?: string;
   defaultEmail?: string;
   defaultSheetsUrl?: string;
+  defaultSheetName?: string;
   onWorkflowSaved?: (workflowId: string) => void;
   onVersionSaved?: () => void;
 }
@@ -30,6 +31,7 @@ export function ExportBar({
   workflowId,
   defaultEmail,
   defaultSheetsUrl,
+  defaultSheetName,
   onWorkflowSaved,
   onVersionSaved,
 }: ExportBarProps) {
@@ -115,6 +117,7 @@ export function ExportBar({
         onClose={() => setShowSheets(false)}
         runId={runId}
         defaultUrl={defaultSheetsUrl}
+        defaultSheetName={defaultSheetName}
       />
     </>
   );

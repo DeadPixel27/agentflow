@@ -371,7 +371,7 @@ export function RefineChatPanel({
 
   if (variant === "panel") {
     return (
-      <aside className="w-[340px] shrink-0 flex flex-col border-l border-border bg-card min-h-0">
+      <aside className="w-full lg:w-[340px] shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l border-border bg-card min-h-0 max-h-[42vh] lg:max-h-none">
         <div className="shrink-0 p-4 border-b border-border space-y-2">
           <h2 className="font-serif text-base font-semibold">Refine</h2>
           <p className="text-xs text-muted-foreground">

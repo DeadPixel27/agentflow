@@ -11,11 +11,13 @@ import {
 const USER_ID_KEY = "nexora_user_id";
 const USER_NAME_KEY = "nexora_user_name";
 const USER_EMAIL_KEY = "nexora_user_email";
+const USER_AUTH_PROVIDER_KEY = "nexora_auth_provider";
 
 export interface StoredUser {
   user_id: string;
   name: string;
   email: string;
+  auth_provider?: string;
 }
 
 export class SignInRequiredError extends Error {
@@ -38,6 +40,7 @@ export function loadStoredUser(): StoredUser | null {
     user_id,
     name,
     email: localStorage.getItem(USER_EMAIL_KEY) ?? "",
+    auth_provider: localStorage.getItem(USER_AUTH_PROVIDER_KEY) ?? undefined,
   };
 }
 
@@ -45,12 +48,18 @@ export function saveStoredUser(user: StoredUser): void {
   localStorage.setItem(USER_ID_KEY, user.user_id);
   localStorage.setItem(USER_NAME_KEY, user.name);
   localStorage.setItem(USER_EMAIL_KEY, user.email);
+  if (user.auth_provider) {
+    localStorage.setItem(USER_AUTH_PROVIDER_KEY, user.auth_provider);
+  } else {
+    localStorage.removeItem(USER_AUTH_PROVIDER_KEY);
+  }
 }
 
 export function clearStoredUser(): void {
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(USER_NAME_KEY);
   localStorage.removeItem(USER_EMAIL_KEY);
+  localStorage.removeItem(USER_AUTH_PROVIDER_KEY);
   clearAccessToken();
 }
 
@@ -62,12 +71,14 @@ function storeSession(result: {
   user: User;
   is_new_user: boolean;
   token: string;
+  auth_provider?: string;
 }): { user: StoredUser; isNewUser: boolean } {
   setAccessToken(result.token);
   const stored: StoredUser = {
     user_id: result.user.user_id,
     name: result.user.name,
     email: result.user.email,
+    auth_provider: result.auth_provider || result.user.auth_provider || undefined,
   };
   saveStoredUser(stored);
   return { user: stored, isNewUser: result.is_new_user };
@@ -132,6 +143,7 @@ export async function refreshStoredUser(): Promise<StoredUser | null> {
       user_id: user.user_id,
       name: user.name,
       email: user.email,
+      auth_provider: user.auth_provider || stored.auth_provider,
     };
     saveStoredUser(updated);
     return updated;
@@ -153,5 +165,6 @@ export function toStoredUser(user: User): StoredUser {
     user_id: user.user_id,
     name: user.name,
     email: user.email,
+    auth_provider: user.auth_provider || undefined,
   };
 }
