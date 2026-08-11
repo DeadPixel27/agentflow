@@ -25,6 +25,9 @@ async def upload_documents(
     files: list[UploadFile] = File(..., description="1-10 PDF or image files"),
 ) -> UploadResponse:
     try:
-        return await upload_service.process_upload_batch(files)
+        return await upload_service.process_upload_batch(
+            files,
+            user_id=current_user.user_id,
+        )
     except InvalidUploadError as e:
         raise HTTPException(status_code=400, detail=str(e))

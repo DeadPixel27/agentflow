@@ -36,6 +36,10 @@ def list_runs_by_workflow(workflow_id):
     return get_repository().list_runs_by_workflow(workflow_id)
 
 
+def list_runs_by_status(status):
+    return get_repository().list_runs_by_status(status)
+
+
 def save_workflow(workflow):
     get_repository().save_workflow(workflow)
 
@@ -46,6 +50,14 @@ def get_workflow(workflow_id):
 
 def list_workflows(user_id=None):
     return get_repository().list_workflows(user_id=user_id)
+
+
+def save_upload(upload):
+    get_repository().save_upload(upload)
+
+
+def get_upload(upload_id):
+    return get_repository().get_upload(upload_id)
 
 
 __all__ = [
@@ -63,7 +75,10 @@ __all__ = [
     "save_run",
     "get_run",
     "list_runs_by_workflow",
+    "list_runs_by_status",
     "save_workflow",
     "get_workflow",
     "list_workflows",
+    "save_upload",
+    "get_upload",
 ]

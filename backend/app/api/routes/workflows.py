@@ -4,13 +4,15 @@ Workflows Route — save, list, and run reusable workflow templates.
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 
-from app.api.dependencies import CurrentUserDep, WorkflowServiceDep
-from app.api.ownership import require_self, require_workflow_owner
+from app.api.dependencies import CurrentUserDep, RepoDep, WorkflowServiceDep
+from app.api.ownership import get_owned_upload, require_self, require_workflow_owner
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
+from app.config import settings
 from app.models.api.runs import RunResponse
+from app.rate_limit import limiter
 from app.models.api.workflows import (
     WorkflowCreateRequest,
     WorkflowFromRunRequest,
@@ -172,21 +174,28 @@ async def list_workflow_runs(
 
 
 @router.post("/{workflow_id}/runs", response_model=RunResponse)
+@limiter.limit(settings.rate_limit_runs_adhoc)
 async def run_saved_workflow(
+    request: Request,
     workflow_id: str,
     body: WorkflowRunRequest,
     background_tasks: BackgroundTasks,
     workflows: WorkflowServiceDep,
+    repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run a saved workflow on a new upload. Poll GET /api/runs/{id} for progress."""
-    from app.api.usage_http import enforce_upload_usage, record_run_usage
+    from app.api.usage_http import (
+        charge_run_pages_or_abandon,
+        enforce_upload_usage,
+    )
 
     try:
         workflow = workflows.fetch_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     require_workflow_owner(workflow, current_user)
+    get_owned_upload(repo, body.upload_id, current_user)
 
     page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
@@ -200,13 +209,13 @@ async def run_saved_workflow(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    background_tasks.add_task(execute_run, run.run_id)
-    await record_run_usage(
+    await charge_run_pages_or_abandon(
         current_user.user_id,
+        run,
         page_count=page_count,
-        run_id=run.run_id,
         template_id=getattr(run, "template_id", None),
     )
+    background_tasks.add_task(execute_run, run.run_id)
     return to_run_response(run)
 
 

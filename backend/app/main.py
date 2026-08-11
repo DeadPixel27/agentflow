@@ -54,7 +54,22 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.persistence import get_data_backend_name
+
+    settings.require_persistent_backend(get_data_backend_name())
+
     ensure_pipeline_templates_seeded()
+    if settings.orphan_reclaim_on_startup:
+        from app.services.pipeline.orphan_reclaim import reclaim_all_running
+
+        try:
+            await reclaim_all_running()
+        except Exception:
+            import logging
+
+            logging.getLogger("runner").exception(
+                "Orphan run reclaim on startup failed"
+            )
     yield
 
 

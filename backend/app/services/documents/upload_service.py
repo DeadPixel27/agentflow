@@ -11,7 +11,8 @@ from fastapi import UploadFile
 from app.config import settings
 from app.models.api.upload import UploadResponse, UploadedDocument
 from app.models.domain.document import InvalidUploadError
-from app.persistence.protocols import DocumentStorageRepository
+from app.models.domain.upload import UploadRecord
+from app.persistence.protocols import DataRepository, DocumentStorageRepository
 from app.services.documents.text_extractor import ExtractionResult, extract_text
 
 logger = logging.getLogger("upload")
@@ -20,19 +21,36 @@ MAX_FILES_PER_UPLOAD = 10
 
 
 class UploadService:
-    def __init__(self, store: DocumentStorageRepository) -> None:
+    def __init__(
+        self,
+        store: DocumentStorageRepository,
+        repo: DataRepository,
+    ) -> None:
         self._store = store
+        self._repo = repo
 
-    async def process_upload_batch(self, files: list[UploadFile]) -> UploadResponse:
-        """Process a batch of uploaded files end-to-end."""
+    async def process_upload_batch(
+        self,
+        files: list[UploadFile],
+        *,
+        user_id: str,
+    ) -> UploadResponse:
+        """Process a batch of uploaded files end-to-end and bind to owner."""
         self._validate_batch(files)
 
         upload_id = str(uuid.uuid4())
-        logger.info("Upload batch started — %d file(s), upload_id=%s", len(files), upload_id)
+        logger.info(
+            "Upload batch started — %d file(s), upload_id=%s user=%s",
+            len(files),
+            upload_id,
+            user_id,
+        )
 
         documents: list[UploadedDocument] = []
         for file in files:
             documents.append(await self._process_single_file(file, upload_id))
+
+        self._repo.save_upload(UploadRecord(upload_id=upload_id, user_id=user_id))
 
         return UploadResponse(
             upload_id=upload_id,

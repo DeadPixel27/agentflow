@@ -18,11 +18,12 @@ import {
   ApiError,
   downloadCsv,
   downloadJson,
+  fetchDocumentAccessUrl,
   getUploadDocuments,
-  inputDocumentUrl,
   type RunResponse,
   type UploadedDocumentSummary,
 } from "@/lib/api";
+import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 interface WorkflowRunListProps {
@@ -77,16 +78,31 @@ function RunDocumentsPanel({ run }: { run: RunResponse }) {
         <ul className="space-y-1.5">
           {documents.map((doc) => (
             <li key={doc.document_id}>
-              <a
-                href={inputDocumentUrl(run.upload_id, doc.document_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 text-sm text-primary hover:underline text-left"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const access = await fetchDocumentAccessUrl(
+                        run.upload_id,
+                        doc.document_id,
+                      );
+                      window.open(access.url, "_blank", "noopener,noreferrer");
+                    } catch (e) {
+                      toastError(
+                        e instanceof ApiError
+                          ? e.message
+                          : "Failed to open document.",
+                      );
+                    }
+                  })();
+                }}
               >
                 <FileText className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{doc.filename}</span>
                 <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
-              </a>
+              </button>
             </li>
           ))}
         </ul>

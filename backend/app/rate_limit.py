@@ -11,13 +11,11 @@ def _user_id_from_request(request: Request) -> str | None:
     if user and hasattr(user, "user_id") and user.user_id:
         return str(user.user_id)
 
-    token: str | None = None
     auth = request.headers.get("Authorization") or ""
-    if auth.lower().startswith("bearer "):
-        token = auth[7:].strip() or None
-    if not token:
-        token = request.query_params.get("access_token")
+    if not auth.lower().startswith("bearer "):
+        return None
 
+    token = auth[7:].strip() or None
     if not token:
         return None
 

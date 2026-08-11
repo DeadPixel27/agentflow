@@ -169,8 +169,11 @@ def test_inbound_rejects_when_secret_missing(monkeypatch):
 
 
 def test_workflow_run_enforces_usage_after_ownership():
+    from app.models.domain.upload import UploadRecord
+
     repo = MemoryRepository()
     repo.save_user(UserRecord(user_id="user-1", name="A", email="a@example.com"))
+    repo.save_upload(UploadRecord(upload_id="upload-1", user_id="user-1"))
     repo.save_workflow(
         WorkflowRecord(
             workflow_id="wf-1",

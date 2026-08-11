@@ -146,17 +146,171 @@ async def test_usage_endpoint_returns_summary():
 
 @pytest.mark.asyncio
 async def test_run_adhoc_returns_429_when_over_monthly_cap(monkeypatch):
+    from app.api.dependencies import get_repo
+    from app.models.domain.upload import UploadRecord
+    from app.models.domain.user import UserRecord
+    from app.persistence.memory_repository import MemoryRepository
+
     monkeypatch.setattr(settings, "free_page_limit_monthly", 1)
     await record_usage("user-1", 1)
+
+    repo = MemoryRepository()
+    repo.save_user(UserRecord(user_id="user-1", name="Test", email="test@example.com"))
+    repo.save_upload(UploadRecord(upload_id="upload-1", user_id="user-1"))
+    app.dependency_overrides[get_repo] = lambda: repo
+
+    async def _fake_pages(_upload_id: str) -> int:
+        return 1
+
+    monkeypatch.setattr("app.api.usage_http.count_upload_pages", _fake_pages)
     override_current_user()
 
     response = client.post(
         "/api/runs/adhoc",
-        json={"upload_id": "missing", "task_description": "extract fields"},
+        json={"upload_id": "upload-1", "task_description": "extract fields"},
     )
     assert response.status_code == 429
     detail = response.json()["detail"].lower()
     assert "free pages" in detail or "used" in detail
+
+
+@pytest.mark.asyncio
+async def test_refine_apply_returns_429_when_over_monthly_cap(monkeypatch):
+    """Apply refine must meter pages — not only max_refines_per_run."""
+    from app.api.dependencies import get_refine_service, get_repo
+    from app.models.domain.pipeline import PlannedStep
+    from app.models.domain.run import RunResult, StepRunRecord
+    from app.persistence.memory_repository import MemoryRepository
+    from app.persistence.user_templates.local_repository import LocalUserTemplateRepository
+    from app.services.pipeline.refine_service import RefineService
+    from app.services.templates.user_template_version_service import UserTemplateVersionService
+
+    monkeypatch.setattr(settings, "free_page_limit_monthly", 1)
+    await record_usage("user-1", 1)
+
+    async def _fake_pages(_upload_id: str) -> int:
+        return 1
+
+    monkeypatch.setattr("app.api.usage_http.count_upload_pages", _fake_pages)
+
+    repo = MemoryRepository()
+    repo.save_run(
+        RunResult(
+            run_id="run-parent",
+            upload_id="upload-1",
+            task_description="extract",
+            status="completed",
+            steps=[
+                StepRunRecord(
+                    step_order=1,
+                    agent_type="transform.field_extractor",
+                    status="completed",
+                )
+            ],
+            planned_steps=[
+                PlannedStep(
+                    step_order=1,
+                    agent_type="transform.field_extractor",
+                    config={"fields": ["vendor"]},
+                    reason="extract",
+                )
+            ],
+            user_id="user-1",
+            result={"rows": [{"vendor": "Acme"}]},
+        )
+    )
+    app.dependency_overrides[get_repo] = lambda: repo
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    app.dependency_overrides[get_refine_service] = lambda: RefineService(repo, versions)
+    override_current_user()
+
+    response = client.post(
+        "/api/runs/run-parent/refine",
+        json={"message": "fix vendor casing"},
+    )
+    assert response.status_code == 429
+    detail = response.json()["detail"].lower()
+    assert "free pages" in detail or "used" in detail
+
+
+@pytest.mark.asyncio
+async def test_refine_plan_preview_returns_429_when_over_monthly_cap(monkeypatch):
+    """Ready plan + preview must meter GPT-4o pages before extract_fields."""
+    from app.api.dependencies import get_repo, get_version_service
+    from app.models.domain.pipeline import PlannedStep
+    from app.models.domain.run import RunResult, StepRunRecord
+    from app.persistence.memory_repository import MemoryRepository
+    from app.persistence.user_templates.local_repository import LocalUserTemplateRepository
+    from app.services.templates.user_template_version_service import UserTemplateVersionService
+
+    monkeypatch.setattr(settings, "free_page_limit_monthly", 1)
+    await record_usage("user-1", 1)
+
+    async def _fake_pages(_upload_id: str) -> int:
+        return 1
+
+    monkeypatch.setattr("app.api.usage_http.count_upload_pages", _fake_pages)
+
+    preview_calls = {"n": 0}
+
+    async def _fake_plan(**_kwargs):
+        return {
+            "ready": True,
+            "message": "Ready to apply.",
+            "planned_changes": ["Normalize vendor"],
+            "accumulated_instruction": "Normalize vendor casing.",
+        }
+
+    async def _fake_preview(*_args, **_kwargs):
+        preview_calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_chat.plan_refinement",
+        _fake_plan,
+    )
+    monkeypatch.setattr(
+        "app.services.pipeline.refine_preview.preview_refinement",
+        _fake_preview,
+    )
+
+    repo = MemoryRepository()
+    repo.save_run(
+        RunResult(
+            run_id="run-parent",
+            upload_id="upload-1",
+            task_description="extract",
+            status="completed",
+            steps=[
+                StepRunRecord(
+                    step_order=1,
+                    agent_type="transform.field_extractor",
+                    status="completed",
+                )
+            ],
+            planned_steps=[
+                PlannedStep(
+                    step_order=1,
+                    agent_type="transform.field_extractor",
+                    config={"fields": ["vendor"]},
+                    reason="extract",
+                )
+            ],
+            user_id="user-1",
+            result={"rows": [{"vendor": "Acme"}]},
+        )
+    )
+    app.dependency_overrides[get_repo] = lambda: repo
+    versions = UserTemplateVersionService(repo, LocalUserTemplateRepository())
+    app.dependency_overrides[get_version_service] = lambda: versions
+    override_current_user()
+
+    response = client.post(
+        "/api/runs/run-parent/refine/plan",
+        json={"message": "fix vendor", "chat_history": []},
+    )
+    assert response.status_code == 429
+    assert preview_calls["n"] == 0  # must not burn GPT-4o when over cap
 
 
 @pytest.mark.asyncio

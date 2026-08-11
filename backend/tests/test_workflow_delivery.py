@@ -6,6 +6,18 @@ from app.models.domain.email import EmailDeliveryError, EmailResult
 from app.models.domain.run import RunResult
 from app.models.domain.sheets import SheetsError, SheetsPushResult
 from app.services.email.workflow_delivery import deliver_workflow_defaults
+from app.services.usage import metering
+
+
+@pytest.fixture(autouse=True)
+def _isolate_usage(monkeypatch):
+    monkeypatch.setattr(
+        "app.persistence.supabase_repository.is_supabase_configured",
+        lambda: False,
+    )
+    metering.reset_memory_usage()
+    yield
+    metering.reset_memory_usage()
 
 
 def _run(**kwargs) -> RunResult:
@@ -177,3 +189,43 @@ async def test_deliver_swallows_email_and_sheets_errors():
         ),
     ):
         await deliver_workflow_defaults(_run(), [{"a": 1}])
+
+
+@pytest.mark.asyncio
+async def test_deliver_skips_when_outbound_cap_hit(monkeypatch):
+    from app.config import settings
+    from app.services.usage import metering
+    from app.services.usage.metering import EMAIL_EVENT_TYPE, SHEETS_EVENT_TYPE
+
+    monkeypatch.setattr(
+        "app.persistence.supabase_repository.is_supabase_configured",
+        lambda: False,
+    )
+    metering.reset_memory_usage()
+    monkeypatch.setattr(settings, "free_email_limit_monthly", 1)
+    monkeypatch.setattr(settings, "free_sheets_limit_monthly", 1)
+    await metering.record_usage("u1", 1, event_type=EMAIL_EVENT_TYPE)
+    await metering.record_usage("u1", 1, event_type=SHEETS_EVENT_TYPE)
+
+    with (
+        patch(
+            "app.services.email.workflow_delivery.get_workflow",
+            return_value=_workflow(
+                default_email="team@example.com",
+                default_sheets_url="https://docs.google.com/spreadsheets/d/abc",
+            ),
+        ),
+        patch(
+            "app.services.email.workflow_delivery.send_results_email",
+            new_callable=AsyncMock,
+        ) as send,
+        patch(
+            "app.services.email.workflow_delivery.push_rows_to_sheet",
+            new_callable=AsyncMock,
+        ) as push,
+    ):
+        await deliver_workflow_defaults(_run(), [{"a": 1}])
+
+    send.assert_not_awaited()
+    push.assert_not_awaited()
+    metering.reset_memory_usage()

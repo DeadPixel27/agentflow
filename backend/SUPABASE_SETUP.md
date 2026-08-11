@@ -26,8 +26,13 @@ Tables created:
 | `workflow_runs` | Execution history |
 | `workflow_step_runs` | Per-step run output |
 | `pipeline_templates` | Landing-page task presets (editable in Table Editor) |
+| `uploads` | Upload ownership registry (`user_id` binding) |
 
-> **Existing project?** Run [`supabase/migrations/002_add_users_and_run_document_ids.sql`](supabase/migrations/002_add_users_and_run_document_ids.sql) instead if you already had an older schema.
+### Existing projects — run migrations
+
+If the project already had an older schema, apply numbered files under [`supabase/migrations/`](supabase/migrations/) in order (through at least `012_uploads.sql` and `013_storage_private.sql`) instead of re-running the full `schema.sql`.
+
+> Older note: [`002_add_users_and_run_document_ids.sql`](supabase/migrations/002_add_users_and_run_document_ids.sql) was the first incremental migration for very early schemas.
 
 ## 3. Get API keys
 
@@ -36,7 +41,9 @@ Tables created:
    - **Project URL** → `SUPABASE_URL`
    - **Secret key** (`sb_secret_...`) → `SUPABASE_SECRET_KEY`
 
-Use the **secret** key on the backend only — never expose it in the frontend.
+Use the **secret** key on the backend only — never expose it in the frontend (and never as `NEXT_PUBLIC_*`).
+
+**Production (Railway):** set `APP_ENV=production` plus real `SUPABASE_URL` / `SUPABASE_SECRET_KEY`. If Supabase is missing, the API refuses to start and `/api/health` returns **503** (in-memory fallback is local/dev only).
 
 ## 4. Update `.env`
 
@@ -54,22 +61,30 @@ SUPABASE_SECRET_KEY=sb_secret_xxxxxxxx
 
 Keep your existing `GROQ_API_KEY` line.
 
-## 5. Enable document storage (Supabase Storage)
+## 5. Enable document + template storage (Supabase Storage)
 
-Uploaded PDFs/images can be stored in Supabase instead of local disk. This is required for production deploys (Railway/Vercel).
+Uploaded PDFs/images and user-template version payloads are stored in **private** buckets. The API serves documents after auth/ownership checks; the frontend must never talk to Storage with the anon key.
 
-### Create the bucket
+### Create the buckets
 
 1. Dashboard → **Storage** → **New bucket**
 2. Name: `documents` (must match `SUPABASE_DOCUMENTS_BUCKET` in `.env`)
-3. **Public bucket**: OFF (backend serves files via API using the secret key)
+3. **Public bucket**: **OFF**
 4. Click **Create bucket**
+5. Repeat for `user-templates` (must match `SUPABASE_USER_TEMPLATES_BUCKET`) — **Public**: **OFF**
+
+Or run [`supabase/migrations/013_storage_private.sql`](supabase/migrations/013_storage_private.sql) in the SQL Editor — it upserts both buckets as private and adds a restrictive Storage policy so `anon` / `authenticated` cannot read or write those objects (service role still works).
+
+### Defense in depth
+
+API ownership checks (#6) do **not** protect a **public** bucket. If `public=true` or permissive Storage policies allow listing/download, anyone who can guess `{upload_id}/...` can leak files without your JWT. Keep buckets private and run `013_storage_private.sql` in production.
 
 ### Configure `.env`
 
 ```env
 DOCUMENT_STORAGE=auto
 SUPABASE_DOCUMENTS_BUCKET=documents
+SUPABASE_USER_TEMPLATES_BUCKET=user-templates
 ```
 
 | `DOCUMENT_STORAGE` | Behavior |
@@ -95,6 +110,8 @@ OK: Connected to Supabase
   OK  table: users
   OK  table: workflows
   ...
+  OK  bucket: documents (private)
+  OK  bucket: user-templates (private)
 All checks passed.
 ```
 
@@ -138,10 +155,12 @@ Without Supabase, data is in-memory and lost on restart.
 | `relation "users" does not exist` | Run `schema.sql` in SQL Editor |
 | `Invalid API key` | Use **secret** key, not publishable |
 | `degraded` status | Run `python scripts/verify_supabase.py` for details |
-| RLS errors | Backend uses service role key; RLS is bypassed |
-| `Bucket not found` | Create `documents` bucket in Storage (step 5) |
+| RLS errors on backend | Backend uses service role key; Storage/Postgres RLS is bypassed for that key |
+| `must be owner of table objects` | Do not `ALTER TABLE storage.objects` (RLS is already on). Re-run the current `013_storage_private.sql`. If `CREATE POLICY` still fails, run only the `storage.buckets` upsert block (sets `public=false`) and manage policies in Dashboard → Storage → Policies (empty allow-list = deny for anon) |
+| `Bucket not found` | Create `documents` / `user-templates` or run `013_storage_private.sql` |
+| Bucket marked public in verify | Turn Public OFF in Storage settings and re-run `013_storage_private.sql` |
 | Files 404 after deploy | Set `DOCUMENT_STORAGE=auto` and configure Supabase Storage |
 
 ## Optional: view data
 
-Supabase Dashboard → **Table Editor** → browse `users`, `workflows`, `workflow_runs`.
+Supabase Dashboard → **Table Editor** → browse `users`, `workflows`, `workflow_runs`, `uploads`.

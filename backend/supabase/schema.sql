@@ -180,3 +180,12 @@ create index if not exists idx_analytics_events_type_date
 
 alter table users add column if not exists is_admin boolean not null default false;
 
+-- Uploads registry (owner binding for IDOR prevention)
+create table if not exists uploads (
+    id text primary key,
+    user_id uuid not null references users(id) on delete cascade,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists idx_uploads_user_id on uploads(user_id);
+

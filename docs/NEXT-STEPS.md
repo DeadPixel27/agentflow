@@ -37,6 +37,7 @@ Launch product through V3 + launch features is built. Recent ship: side-by-side 
 - SEO template pages (`/templates/[slug]`) — hold for now
 - Rebrand from AgentFlow — hold for now
 - Inbound email IMAP poll (unread + attachments every 15 min → one batched run → mark read) — hold for later
+- **Job queue / Redis / multi-replica workers**, extraction parallelism, scaling triggers — see [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md)
 
 ---
 

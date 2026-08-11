@@ -2,10 +2,11 @@
 Extract Route — AI field extraction from document text.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from app.api.dependencies import CurrentUserDep
-from app.api.usage_http import enforce_usage, record_extract_usage
+from app.api.dependencies import CurrentUserDep, RepoDep
+from app.api.ownership import get_owned_upload
+from app.api.usage_http import charge_extract_pages, refund_extract_pages
 from app.config import settings
 from app.models.api.extract import (
     ExtractFromUploadRequest,
@@ -13,6 +14,7 @@ from app.models.api.extract import (
     ExtractResponse,
     ExtractedFields,
 )
+from app.rate_limit import limiter
 from app.services.extraction.field_extractor import (
     DocumentInput,
     extract_fields,
@@ -41,13 +43,15 @@ def _to_response(results) -> ExtractResponse:
 
 
 @router.post("/extract", response_model=ExtractResponse)
+@limiter.limit(settings.rate_limit_extract)
 async def extract_from_text(
+    request: Request,
     body: ExtractRequest,
     current_user: CurrentUserDep,
 ) -> ExtractResponse:
     """Extract structured fields from document text using OpenAI."""
     page_count = max(len(body.documents), 1)
-    await enforce_usage(current_user.user_id, page_count)
+    await charge_extract_pages(current_user.user_id, page_count)
     try:
         documents = [
             DocumentInput(
@@ -63,22 +67,27 @@ async def extract_from_text(
             body.instructions,
         )
     except ValueError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=502, detail=str(e))
 
-    await record_extract_usage(current_user.user_id, page_count=page_count)
     return _to_response(results)
 
 
 @router.post("/extract/from-upload", response_model=ExtractResponse)
+@limiter.limit(settings.rate_limit_extract)
 async def extract_from_upload(
+    request: Request,
     body: ExtractFromUploadRequest,
+    repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> ExtractResponse:
     """Re-read files from a prior upload, then extract fields with OpenAI."""
+    get_owned_upload(repo, body.upload_id, current_user)
     page_count = await count_upload_pages(body.upload_id)
-    await enforce_usage(current_user.user_id, page_count)
+    await charge_extract_pages(current_user.user_id, page_count)
     try:
         results = await extract_fields_from_upload(
             body.upload_id,
@@ -86,11 +95,13 @@ async def extract_from_upload(
             body.instructions,
         )
     except UploadNotFoundError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
+        await refund_extract_pages(current_user.user_id, page_count)
         raise HTTPException(status_code=502, detail=str(e))
 
-    await record_extract_usage(current_user.user_id, page_count=page_count)
     return _to_response(results)

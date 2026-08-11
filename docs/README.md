@@ -28,6 +28,8 @@ All project documentation, split by topic. Updated Aug 9, 2026.
 |------|--------------|-------------|
 | [GAPS-TECHNICAL.md](./GAPS-TECHNICAL.md) | 15 technical gaps with exact fixes + priority table | Sprint planning, pre-deploy checklist |
 | [FEATURE-ROADMAP.md](./FEATURE-ROADMAP.md) | 4 standout features + timeline (MVP → V3.0) | Product planning, what to build next |
+| [NEXT-STEPS.md](./NEXT-STEPS.md) | Current launch checklist (caps, deploy, testing) | **This week’s ship order** |
+| [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md) | BackgroundTasks vs queue, Redis later, multi-replica, parallelism | When load / redeploys / autoscaling come up |
 
 ---
 

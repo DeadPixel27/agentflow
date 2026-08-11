@@ -29,3 +29,8 @@ class UploadDocumentsResponse(BaseModel):
     upload_id: str
     documents: list[UploadedDocumentSummary]
 
+
+class DocumentAccessResponse(BaseModel):
+    url: str = Field(description="Short-lived URL with scoped doc_token query param")
+    expires_at: str = Field(description="ISO-8601 UTC expiry of the document token")
+

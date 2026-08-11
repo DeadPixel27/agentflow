@@ -7,6 +7,7 @@ from fastapi import UploadFile
 
 from app.config import settings
 from app.models.domain.document import InvalidUploadError
+from app.persistence.memory_repository import MemoryRepository
 from app.services.documents.upload_service import UploadService
 
 
@@ -17,6 +18,10 @@ class _StubDocumentStore:
         raise AssertionError("save_document should not be called when batch validation fails")
 
 
+def _StubRepo():
+    return MemoryRepository()
+
+
 def _file_with_size(name: str, size: int) -> UploadFile:
     upload = UploadFile(filename=name, file=io.BytesIO(b"x"))
     upload.size = size
@@ -25,22 +30,22 @@ def _file_with_size(name: str, size: int) -> UploadFile:
 
 @pytest.mark.asyncio
 async def test_rejects_empty_batch():
-    service = UploadService(_StubDocumentStore())
+    service = UploadService(_StubDocumentStore(), _StubRepo())
     with pytest.raises(InvalidUploadError, match="At least one file"):
-        await service.process_upload_batch([])
+        await service.process_upload_batch([], user_id="user-1")
 
 
 @pytest.mark.asyncio
 async def test_rejects_file_over_per_file_limit():
-    service = UploadService(_StubDocumentStore())
+    service = UploadService(_StubDocumentStore(), _StubRepo())
     oversized = _file_with_size("huge.pdf", settings.max_upload_size_bytes + 1)
     with pytest.raises(InvalidUploadError, match="per-file limit"):
-        await service.process_upload_batch([oversized])
+        await service.process_upload_batch([oversized], user_id="user-1")
 
 
 @pytest.mark.asyncio
 async def test_rejects_too_many_files():
-    service = UploadService(_StubDocumentStore())
+    service = UploadService(_StubDocumentStore(), _StubRepo())
     files = [_file_with_size(f"doc-{i}.pdf", 1024) for i in range(11)]
     with pytest.raises(InvalidUploadError, match="Maximum 10 files"):
-        await service.process_upload_batch(files)
+        await service.process_upload_batch(files, user_id="user-1")

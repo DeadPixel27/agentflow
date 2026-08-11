@@ -10,6 +10,7 @@ from app.config import settings
 from app.models.domain.email import InboundAddress
 from app.models.domain.pipeline import PlannedStep
 from app.models.domain.run import RunResult, StepRunRecord
+from app.models.domain.upload import UploadRecord
 from app.models.domain.user import UserRecord
 from app.models.domain.user_template_version import RefinementEvent, UserTemplateVersionRecord
 from app.models.domain.workflow import WorkflowRecord, WorkflowSummary
@@ -218,6 +219,22 @@ class SupabaseRepository:
             .select("id")
             .eq("workflow_id", workflow_id)
             .order("created_at", desc=True)
+            .execute()
+        )
+        runs: list[RunResult] = []
+        for row in resp.data or []:
+            run = self.get_run(row["id"])
+            if run is not None:
+                runs.append(run)
+        return runs
+
+    def list_runs_by_status(self, status: str) -> list[RunResult]:
+        resp = (
+            _get_client()
+            .table("workflow_runs")
+            .select("id")
+            .eq("status", status)
+            .order("created_at")
             .execute()
         )
         runs: list[RunResult] = []
@@ -459,6 +476,37 @@ class SupabaseRepository:
         _get_client().table("inbound_addresses").delete().eq(
             "address_id", address_id
         ).execute()
+
+    def save_upload(self, upload: UploadRecord) -> None:
+        row: dict = {
+            "id": upload.upload_id,
+            "user_id": upload.user_id,
+        }
+        if upload.created_at:
+            row["created_at"] = upload.created_at
+        _get_client().table("uploads").upsert(row).execute()
+
+    def get_upload(self, upload_id: str) -> Optional[UploadRecord]:
+        resp = (
+            _get_client()
+            .table("uploads")
+            .select("*")
+            .eq("id", upload_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+        return _upload_from_row(rows[0])
+
+
+def _upload_from_row(row: dict) -> UploadRecord:
+    return UploadRecord(
+        upload_id=row["id"],
+        user_id=str(row["user_id"]),
+        created_at=row.get("created_at"),
+    )
 
 
 def _inbound_address_from_row(row: dict) -> InboundAddress:

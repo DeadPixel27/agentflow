@@ -5,12 +5,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.config import settings
 from app.models.domain.email import EmailDeliveryError, EmailRequest
 from app.models.domain.run import RunResult
 from app.models.domain.sheets import SheetsError
 from app.persistence import get_workflow
 from app.services.email.email_service import send_results_email
 from app.services.sheets.sheets_service import push_rows_to_sheet
+from app.services.usage.metering import (
+    EMAIL_EVENT_TYPE,
+    SHEETS_EVENT_TYPE,
+    UsageLimitError,
+    refund_outbound_usage,
+    reserve_outbound_usage,
+)
 
 logger = logging.getLogger("workflow_delivery")
 
@@ -46,6 +54,32 @@ async def _send_default_email(
     rows: list[dict[str, Any]],
     to_email: str,
 ) -> None:
+    user_id = run.user_id
+    reserved = False
+    if user_id:
+        try:
+            await reserve_outbound_usage(
+                user_id,
+                EMAIL_EVENT_TYPE,
+                settings.free_email_limit_monthly,
+                run_id=run.run_id,
+            )
+            reserved = True
+        except UsageLimitError as exc:
+            logger.warning(
+                "Auto-email skipped for run %s — outbound cap: %s",
+                run.run_id,
+                exc,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "Auto-email skipped for run %s — could not reserve usage: %s",
+                run.run_id,
+                exc,
+            )
+            return
+
     pipeline_name = (run.task_description or "Workflow results")[:80]
     subject = f"{pipeline_name} — Results"
     request = EmailRequest(
@@ -78,6 +112,20 @@ async def _send_default_email(
         except Exception:
             pass
     except EmailDeliveryError as exc:
+        if reserved and user_id:
+            try:
+                await refund_outbound_usage(
+                    user_id,
+                    EMAIL_EVENT_TYPE,
+                    run_id=run.run_id,
+                    reason="email_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to refund auto-email usage for run %s",
+                    run.run_id,
+                    exc_info=True,
+                )
         logger.error(
             "Auto-email failed for run %s to %s: %s",
             run.run_id,
@@ -85,6 +133,20 @@ async def _send_default_email(
             exc,
         )
     except Exception as exc:
+        if reserved and user_id:
+            try:
+                await refund_outbound_usage(
+                    user_id,
+                    EMAIL_EVENT_TYPE,
+                    run_id=run.run_id,
+                    reason="email_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to refund auto-email usage for run %s",
+                    run.run_id,
+                    exc_info=True,
+                )
         logger.error(
             "Unexpected auto-email error for run %s: %s",
             run.run_id,
@@ -97,6 +159,32 @@ async def _push_default_sheets(
     rows: list[dict[str, Any]],
     spreadsheet_url: str,
 ) -> None:
+    user_id = run.user_id
+    reserved = False
+    if user_id:
+        try:
+            await reserve_outbound_usage(
+                user_id,
+                SHEETS_EVENT_TYPE,
+                settings.free_sheets_limit_monthly,
+                run_id=run.run_id,
+            )
+            reserved = True
+        except UsageLimitError as exc:
+            logger.warning(
+                "Auto-sheets skipped for run %s — outbound cap: %s",
+                run.run_id,
+                exc,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "Auto-sheets skipped for run %s — could not reserve usage: %s",
+                run.run_id,
+                exc,
+            )
+            return
+
     try:
         result = await push_rows_to_sheet(
             spreadsheet_url,
@@ -126,12 +214,40 @@ async def _push_default_sheets(
         except Exception:
             pass
     except SheetsError as exc:
+        if reserved and user_id:
+            try:
+                await refund_outbound_usage(
+                    user_id,
+                    SHEETS_EVENT_TYPE,
+                    run_id=run.run_id,
+                    reason="sheets_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to refund auto-sheets usage for run %s",
+                    run.run_id,
+                    exc_info=True,
+                )
         logger.error(
             "Auto-sheets failed for run %s: %s",
             run.run_id,
             exc,
         )
     except Exception as exc:
+        if reserved and user_id:
+            try:
+                await refund_outbound_usage(
+                    user_id,
+                    SHEETS_EVENT_TYPE,
+                    run_id=run.run_id,
+                    reason="sheets_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to refund auto-sheets usage for run %s",
+                    run.run_id,
+                    exc_info=True,
+                )
         logger.error(
             "Unexpected auto-sheets error for run %s: %s",
             run.run_id,

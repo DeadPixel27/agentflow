@@ -5,6 +5,7 @@ from typing import Optional
 
 from app.models.domain.email import InboundAddress
 from app.models.domain.run import RunResult
+from app.models.domain.upload import UploadRecord
 from app.models.domain.user import UserRecord
 from app.models.domain.user_template_version import RefinementEvent, UserTemplateVersionRecord
 from app.models.domain.workflow import WorkflowRecord, WorkflowSummary
@@ -21,6 +22,7 @@ class MemoryRepository:
         self._template_versions: dict[str, UserTemplateVersionRecord] = {}
         self._refinement_events: list[RefinementEvent] = []
         self._inbound_addresses: dict[str, InboundAddress] = {}
+        self._uploads: dict[str, UploadRecord] = {}
 
     def health_check(self) -> tuple[bool, str]:
         return True, "in_memory"
@@ -53,6 +55,13 @@ class MemoryRepository:
             runs,
             key=lambda run: run.created_at or run.run_id,
             reverse=True,
+        )
+
+    def list_runs_by_status(self, status: str) -> list[RunResult]:
+        runs = [run for run in self._runs.values() if run.status == status]
+        return sorted(
+            runs,
+            key=lambda run: run.created_at or run.run_id,
         )
 
     def count_child_runs(self, parent_run_id: str) -> int:
@@ -149,3 +158,9 @@ class MemoryRepository:
 
     def delete_inbound_address(self, address_id: str) -> None:
         self._inbound_addresses.pop(address_id, None)
+
+    def save_upload(self, upload: UploadRecord) -> None:
+        self._uploads[upload.upload_id] = upload
+
+    def get_upload(self, upload_id: str) -> Optional[UploadRecord]:
+        return self._uploads.get(upload_id)

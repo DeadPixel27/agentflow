@@ -4,10 +4,12 @@ Usage metering — track and enforce page extraction limits.
 Free tier: 50 pages/month per user.
 Global daily cap: 500 pages/day across all users (budget protection).
 Refine limit: 10 refinements per run.
+Outbound: 20 emails / 20 Sheets pushes per user per month (separate from pages).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -19,6 +21,29 @@ logger = logging.getLogger("usage")
 
 # In-memory fallback when Supabase is not configured (dev / tests)
 _memory_usage_events: list[dict[str, Any]] = []
+
+EMAIL_EVENT_TYPE = "email_sent"
+SHEETS_EVENT_TYPE = "sheets_push"
+OUTBOUND_EVENT_TYPES = frozenset({EMAIL_EVENT_TYPE, SHEETS_EVENT_TYPE})
+
+# In-process locks (single-replica launch). Multi-replica needs DB locks later.
+_global_usage_lock = asyncio.Lock()
+_user_usage_locks: dict[str, asyncio.Lock] = {}
+_user_locks_guard = asyncio.Lock()
+
+
+async def _user_lock(user_id: str) -> asyncio.Lock:
+    async with _user_locks_guard:
+        lock = _user_usage_locks.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _user_usage_locks[user_id] = lock
+        return lock
+
+
+def _is_page_event(event_type: Any) -> bool:
+    """Outbound units reuse usage_events.pages but must not hit the page pool."""
+    return str(event_type or "") not in OUTBOUND_EVENT_TYPES
 
 
 class UsageLimitError(Exception):
@@ -36,6 +61,7 @@ class RefineLimitError(Exception):
 def reset_memory_usage() -> None:
     """Clear in-memory usage events (tests only)."""
     _memory_usage_events.clear()
+    _user_usage_locks.clear()
 
 
 def _supabase_client():
@@ -72,7 +98,66 @@ def _parse_created_at(value: Any) -> datetime:
 
 
 async def get_user_usage_this_month(user_id: str) -> int:
-    """Count pages used by this user in the current calendar month."""
+    """Count extraction pages used by this user in the current calendar month.
+
+    Excludes outbound units (email_sent / sheets_push) so they do not share
+    the free page pool.
+    """
+    month_start = _month_start()
+    client = _supabase_client()
+    if client is not None:
+        result = (
+            client.table("usage_events")
+            .select("pages,event_type")
+            .eq("user_id", user_id)
+            .gte("created_at", month_start.isoformat())
+            .execute()
+        )
+        return sum(
+            int(row.get("pages") or 0)
+            for row in (result.data or [])
+            if _is_page_event(row.get("event_type"))
+        )
+
+    total = 0
+    for event in _memory_usage_events:
+        if event.get("user_id") != user_id:
+            continue
+        if not _is_page_event(event.get("event_type")):
+            continue
+        if _parse_created_at(event["created_at"]) >= month_start:
+            total += int(event.get("pages") or 0)
+    return total
+
+
+async def get_global_usage_today() -> int:
+    """Count extraction pages today across all users (excludes outbound)."""
+    day_start = _day_start()
+    client = _supabase_client()
+    if client is not None:
+        result = (
+            client.table("usage_events")
+            .select("pages,event_type")
+            .gte("created_at", day_start.isoformat())
+            .execute()
+        )
+        return sum(
+            int(row.get("pages") or 0)
+            for row in (result.data or [])
+            if _is_page_event(row.get("event_type"))
+        )
+
+    total = 0
+    for event in _memory_usage_events:
+        if not _is_page_event(event.get("event_type")):
+            continue
+        if _parse_created_at(event["created_at"]) >= day_start:
+            total += int(event.get("pages") or 0)
+    return total
+
+
+async def get_user_outbound_usage_this_month(user_id: str, event_type: str) -> int:
+    """Count outbound units (email/sheets) for this user this month."""
     month_start = _month_start()
     client = _supabase_client()
     if client is not None:
@@ -80,6 +165,7 @@ async def get_user_usage_this_month(user_id: str) -> int:
             client.table("usage_events")
             .select("pages")
             .eq("user_id", user_id)
+            .eq("event_type", event_type)
             .gte("created_at", month_start.isoformat())
             .execute()
         )
@@ -89,29 +175,36 @@ async def get_user_usage_this_month(user_id: str) -> int:
     for event in _memory_usage_events:
         if event.get("user_id") != user_id:
             continue
+        if event.get("event_type") != event_type:
+            continue
         if _parse_created_at(event["created_at"]) >= month_start:
             total += int(event.get("pages") or 0)
     return total
 
 
-async def get_global_usage_today() -> int:
-    """Count total pages extracted today across all users."""
-    day_start = _day_start()
-    client = _supabase_client()
-    if client is not None:
-        result = (
-            client.table("usage_events")
-            .select("pages")
-            .gte("created_at", day_start.isoformat())
-            .execute()
+async def check_outbound_allowed(
+    user_id: str,
+    event_type: str,
+    limit: int,
+    *,
+    units: int = 1,
+) -> None:
+    """Raise UsageLimitError if outbound monthly cap would be exceeded."""
+    used = await get_user_outbound_usage_this_month(user_id, event_type)
+    if used + units > limit:
+        label = "emails" if event_type == EMAIL_EVENT_TYPE else "Sheets pushes"
+        logger.info(
+            "User %s hit outbound limit type=%s: %d + %d > %d",
+            user_id,
+            event_type,
+            used,
+            units,
+            limit,
         )
-        return sum(int(row.get("pages") or 0) for row in (result.data or []))
-
-    total = 0
-    for event in _memory_usage_events:
-        if _parse_created_at(event["created_at"]) >= day_start:
-            total += int(event.get("pages") or 0)
-    return total
+        raise UsageLimitError(
+            f"You've used {used} of your {limit} free {label} this month. "
+            f"Join the Pro waitlist for higher limits."
+        )
 
 
 async def get_run_refine_count(run_id: str, repo=None) -> int:
@@ -226,6 +319,80 @@ async def record_usage(
     )
 
 
+async def reserve_page_usage(
+    user_id: str,
+    pages: int,
+    *,
+    template_id: str | None = None,
+    run_id: str | None = None,
+    event_type: str = "extraction",
+) -> None:
+    """
+    Atomically (in-process) check page caps and record usage.
+
+    Holds per-user + global locks so concurrent requests on one replica
+    cannot both pass check_usage_allowed and overshoot.
+    """
+    user_lock = await _user_lock(user_id)
+    async with _global_usage_lock:
+        async with user_lock:
+            await check_usage_allowed(user_id, pages)
+            await record_usage(
+                user_id,
+                pages,
+                template_id=template_id,
+                run_id=run_id,
+                event_type=event_type,
+            )
+
+
+async def reserve_outbound_usage(
+    user_id: str,
+    event_type: str,
+    limit: int,
+    *,
+    run_id: str | None = None,
+    units: int = 1,
+) -> None:
+    """Check outbound cap and record units under a per-user lock."""
+    user_lock = await _user_lock(user_id)
+    async with user_lock:
+        await check_outbound_allowed(user_id, event_type, limit, units=units)
+        await record_usage(
+            user_id,
+            units,
+            run_id=run_id,
+            event_type=event_type,
+        )
+
+
+async def refund_outbound_usage(
+    user_id: str,
+    event_type: str,
+    *,
+    run_id: str | None = None,
+    units: int = 1,
+    reason: str = "delivery_failed",
+) -> None:
+    """Compensating negative outbound unit after a failed provider call.
+
+    Uses the same event_type with negative pages so monthly sums stay correct.
+    """
+    await record_usage(
+        user_id,
+        -abs(units),
+        run_id=run_id,
+        event_type=event_type,
+    )
+    logger.info(
+        "Outbound usage refunded: user=%s type=%s units=%d reason=%s",
+        user_id,
+        event_type,
+        units,
+        reason,
+    )
+
+
 async def refund_usage_for_run(run_id: str, *, reason: str = "run_failed") -> None:
     """
     Credit back pages charged for a failed run.
@@ -258,17 +425,21 @@ async def refund_usage_for_run(run_id: str, *, reason: str = "run_failed") -> No
 
 
 async def _pages_charged_for_run(run_id: str) -> int:
-    """Net pages already attributed to this run (charges minus prior refunds)."""
+    """Net extraction pages already attributed to this run (excludes outbound)."""
     client = _supabase_client()
     if client is not None:
         try:
             result = (
                 client.table("usage_events")
-                .select("pages")
+                .select("pages,event_type")
                 .eq("run_id", run_id)
                 .execute()
             )
-            return sum(int(row.get("pages") or 0) for row in (result.data or []))
+            return sum(
+                int(row.get("pages") or 0)
+                for row in (result.data or [])
+                if _is_page_event(row.get("event_type"))
+            )
         except Exception as e:
             logger.debug("pages_charged lookup failed for run=%s: %s", run_id, e)
             return 0
@@ -276,7 +447,7 @@ async def _pages_charged_for_run(run_id: str) -> int:
     return sum(
         int(event.get("pages") or 0)
         for event in _memory_usage_events
-        if event.get("run_id") == run_id
+        if event.get("run_id") == run_id and _is_page_event(event.get("event_type"))
     )
 
 

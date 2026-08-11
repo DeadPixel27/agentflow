@@ -6,6 +6,7 @@ from typing import Any
 
 from app.config import settings
 from app.models.domain.email import InboundAddress, InboundAddressNotFoundError
+from app.models.domain.upload import UploadRecord
 from app.persistence.protocols import DataRepository, DocumentStorageRepository
 
 logger = logging.getLogger("inbound")
@@ -81,6 +82,10 @@ class InboundEmailService:
                 content=att["content"],
                 content_type=att["content_type"],
             )
+
+        self._repo.save_upload(
+            UploadRecord(upload_id=upload_id, user_id=address.user_id)
+        )
 
         logger.info(
             "Inbound email from %s → workflow %s, upload %s, user %s",

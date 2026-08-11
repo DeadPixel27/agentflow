@@ -1,9 +1,9 @@
 "use client";
 
 import { ExternalLink, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { inputDocumentUrl } from "@/lib/api";
+import { ApiError, fetchDocumentAccessUrl } from "@/lib/api";
 
 function ExtractionMethodBadge({ method }: { method?: string }) {
   if (!method) return null;
@@ -52,18 +52,32 @@ export function DocumentTabPanel({
   extractionMethod,
   className,
 }: DocumentTabPanelProps) {
-  const [ready, setReady] = useState(false);
-  const url = useMemo(
-    () => inputDocumentUrl(uploadId, documentId),
-    [uploadId, documentId],
-  );
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const image = isImageFile(filename, fileType);
 
   useEffect(() => {
-    setReady(false);
-    const timer = window.setTimeout(() => setReady(true), 0);
-    return () => window.clearTimeout(timer);
-  }, [documentId, url]);
+    let cancelled = false;
+    setUrl(null);
+    setError(null);
+
+    void (async () => {
+      try {
+        const access = await fetchDocumentAccessUrl(uploadId, documentId);
+        if (!cancelled) setUrl(access.url);
+      } catch (e) {
+        if (!cancelled) {
+          setError(
+            e instanceof ApiError ? e.message : "Failed to load document.",
+          );
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uploadId, documentId]);
 
   return (
     <div className={`flex flex-1 flex-col min-h-0 bg-[#F5F5F4] ${className ?? ""}`}>
@@ -72,19 +86,25 @@ export function DocumentTabPanel({
           {filename}
         </p>
         <ExtractionMethodBadge method={extractionMethod} />
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Open
-        </a>
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open
+          </a>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden p-3">
-        {!ready ? (
+        {error ? (
+          <div className="flex h-full items-center justify-center text-sm text-destructive">
+            {error}
+          </div>
+        ) : !url ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading document…

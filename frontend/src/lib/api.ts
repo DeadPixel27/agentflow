@@ -348,12 +348,16 @@ export async function getUploadDocuments(
   return request<UploadDocumentsResponse>(`/api/uploads/${uploadId}`);
 }
 
-export function inputDocumentUrl(uploadId: string, documentId: string): string {
-  const url = `${API_BASE}/api/uploads/${uploadId}/documents/${documentId}`;
-  const token = getAccessToken();
-  if (!token) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}access_token=${encodeURIComponent(token)}`;
+/** Mint a short-lived document URL (scoped doc_token — never put session JWT in query). */
+export async function fetchDocumentAccessUrl(
+  uploadId: string,
+  documentId: string,
+): Promise<{ url: string; expiresAt: string }> {
+  const body = await request<{ url: string; expires_at: string }>(
+    `/api/uploads/${uploadId}/documents/${documentId}/access`,
+    { method: "POST" },
+  );
+  return { url: body.url, expiresAt: body.expires_at };
 }
 
 export async function listTemplates(category?: string): Promise<TemplateListResponse> {

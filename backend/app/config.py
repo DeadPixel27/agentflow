@@ -8,6 +8,7 @@ HOW: pydantic-settings reads from .env file + environment variables.
 """
 
 from pathlib import Path
+import os
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -55,11 +56,19 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expiry_hours: int = 72
+    # Short-lived capability tokens for <img>/<iframe> document URLs
+    document_token_expiry_minutes: int = 15
 
     # Usage limits
     free_page_limit_monthly: int = 50
     max_refines_per_run: int = 10
     global_daily_page_limit: int = 500
+    # Outbound free-tier units (separate from page pool)
+    free_email_limit_monthly: int = 20
+    free_sheets_limit_monthly: int = 20
+    # BackgroundTasks orphan reclaim (single-replica launch posture)
+    orphan_reclaim_on_startup: bool = True
+    orphan_run_stale_minutes: int = 30
 
     # OCR engine — "tesseract" or "rapidocr"
     ocr_engine: str = "rapidocr"
@@ -76,6 +85,9 @@ class Settings(BaseSettings):
     aws_s3_bucket: str = ""
     aws_s3_region: str = ""
     aws_s3_user_templates_prefix: str = "user-templates"
+
+    # Deployment environment — set APP_ENV=production on Railway
+    app_env: str = "development"
 
     # Supabase — persistence (optional; falls back to in-memory)
     supabase_url: str = ""
@@ -105,6 +117,10 @@ class Settings(BaseSettings):
     # Inbound email (Mailgun webhook)
     inbound_email_domain: str = "ingest.agentflow.app"
     inbound_webhook_secret: str = ""
+    # Reject webhooks whose timestamp is older/newer than this many seconds
+    inbound_webhook_max_age_seconds: int = 300
+    # How long to remember tokens to ignore replays (single-replica in-memory)
+    inbound_webhook_token_ttl_seconds: int = 900
 
     # Comma-separated origins for CORS (e.g. http://localhost:3000,https://app.vercel.app)
     cors_origins: str = "http://localhost:3000"
@@ -112,6 +128,14 @@ class Settings(BaseSettings):
     # slowapi rate limits (see https://slowapi.readthedocs.io/en/latest/)
     rate_limit_runs_adhoc: str = "10/minute"
     rate_limit_upload: str = "20/minute"
+    rate_limit_email: str = "5/minute"
+    rate_limit_sheets: str = "5/minute"
+    rate_limit_extract: str = "10/minute"
+    rate_limit_refine_plan: str = "20/minute"
+    rate_limit_pipeline: str = "10/minute"
+    rate_limit_auth: str = "10/minute"
+    rate_limit_waitlist: str = "5/minute"
+    rate_limit_inbound: str = "60/minute"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -143,6 +167,21 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def is_production(self) -> bool:
+        env = self.app_env.strip().lower()
+        if env in {"production", "prod"}:
+            return True
+        return os.getenv("RAILWAY_ENVIRONMENT", "").strip().lower() == "production"
+
+    def require_persistent_backend(self, backend_name: str) -> None:
+        """Raise if production is using in-memory data persistence."""
+        if self.is_production and backend_name == "memory":
+            raise RuntimeError(
+                "In-memory persistence is not allowed in production. "
+                "Set SUPABASE_URL and SUPABASE_SECRET_KEY, or unset APP_ENV=production."
+            )
 
 
 settings = Settings()

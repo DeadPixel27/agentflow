@@ -1,11 +1,12 @@
 """Auth routes — Google ID token or (optional) email session. Returns app JWT."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dependencies import AuthServiceDep
 from app.config import settings
 from app.models.api.auth import GoogleSignInRequest, SignInRequest, SignInResponse
 from app.models.api.users import UserResponse
+from app.rate_limit import limiter
 from app.services.auth.google_tokens import InvalidGoogleTokenError, verify_google_id_token
 from app.services.auth.jwt import create_access_token
 
@@ -30,7 +31,12 @@ def _require_email_auth() -> None:
 
 
 @router.post("/session", response_model=SignInResponse)
-async def create_session(body: SignInRequest, auth: AuthServiceDep) -> SignInResponse:
+@limiter.limit(settings.rate_limit_auth)
+async def create_session(
+    request: Request,
+    body: SignInRequest,
+    auth: AuthServiceDep,
+) -> SignInResponse:
     """
     Sign in or create an account via email (dev/tests only when AUTH_ALLOW_EMAIL=true).
     """
@@ -51,7 +57,9 @@ async def create_session(body: SignInRequest, auth: AuthServiceDep) -> SignInRes
 
 
 @router.post("/google", response_model=SignInResponse)
+@limiter.limit(settings.rate_limit_auth)
 async def create_google_session(
+    request: Request,
     body: GoogleSignInRequest,
     auth: AuthServiceDep,
 ) -> SignInResponse:

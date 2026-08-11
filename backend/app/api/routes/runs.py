@@ -15,7 +15,12 @@ from app.api.dependencies import (
 )
 from app.api.mappers.planned_step import to_planned_steps
 from app.api.mappers.run import to_run_response
-from app.api.usage_http import enforce_upload_usage, record_run_usage
+from app.api.ownership import get_owned_upload
+from app.api.usage_http import (
+    charge_run_pages,
+    charge_run_pages_or_abandon,
+    enforce_upload_usage,
+)
 from app.config import settings
 from app.models.api.runs import (
     RunAdhocRequest,
@@ -54,9 +59,11 @@ async def run_adhoc(
     request: Request,
     body: RunAdhocRequest,
     background_tasks: BackgroundTasks,
+    repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
     """Plan a pipeline and start execution. Poll GET /api/runs/{id} for progress."""
+    get_owned_upload(repo, body.upload_id, current_user)
     page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         plan = await create_plan(body.upload_id, body.task_description)
@@ -73,12 +80,12 @@ async def run_adhoc(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    _schedule_run(background_tasks, run.run_id)
-    await record_run_usage(
+    await charge_run_pages_or_abandon(
         current_user.user_id,
+        run,
         page_count=page_count,
-        run_id=run.run_id,
     )
+    _schedule_run(background_tasks, run.run_id)
     return to_run_response(run)
 
 
@@ -90,9 +97,11 @@ async def run_template(
     background_tasks: BackgroundTasks,
     template_service: TemplateServiceDep,
     versions: VersionServiceDep,
+    repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run a pipeline from a template definition. Poll GET /api/runs/{id} for progress."""
+    get_owned_upload(repo, body.upload_id, current_user)
     page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         plan = await template_service.build_plan(body.template_id, body.upload_id)
@@ -120,23 +129,27 @@ async def run_template(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    _schedule_run(background_tasks, run.run_id)
-    await record_run_usage(
+    await charge_run_pages_or_abandon(
         current_user.user_id,
+        run,
         page_count=page_count,
-        run_id=run.run_id,
         template_id=body.template_id,
     )
+    _schedule_run(background_tasks, run.run_id)
     return to_run_response(run)
 
 
 @router.post("", response_model=RunResponse)
+@limiter.limit(settings.rate_limit_runs_adhoc)
 async def run_pipeline_steps(
+    request: Request,
     body: RunRequest,
     background_tasks: BackgroundTasks,
+    repo: RepoDep,
     current_user: CurrentUserDep,
 ) -> RunResponse:
     """Run an explicit plan. Poll GET /api/runs/{id} for progress."""
+    get_owned_upload(repo, body.upload_id, current_user)
     page_count = await enforce_upload_usage(current_user.user_id, body.upload_id)
     try:
         steps = to_planned_steps(body.steps)
@@ -153,17 +166,19 @@ async def run_pipeline_steps(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    _schedule_run(background_tasks, run.run_id)
-    await record_run_usage(
+    await charge_run_pages_or_abandon(
         current_user.user_id,
+        run,
         page_count=page_count,
-        run_id=run.run_id,
     )
+    _schedule_run(background_tasks, run.run_id)
     return to_run_response(run)
 
 
 @router.post("/{run_id}/refine/plan", response_model=RefinePlanResponse)
+@limiter.limit(settings.rate_limit_refine_plan)
 async def refine_plan(
+    request: Request,
     run_id: str,
     body: RefinePlanRequest,
     repo: RepoDep,
@@ -220,8 +235,20 @@ async def refine_plan(
         len(str(result.get("accumulated_instruction") or "")),
     )
 
+    # Plan chat (Groq) is cheap and unmetered. Preview re-extracts with GPT-4o —
+    # reserve pages before preview (fail-closed); refund if preview crashes.
     preview: list = []
     if result["ready"] and result.get("accumulated_instruction"):
+        page_count = await enforce_upload_usage(
+            current_user.user_id, run.upload_id
+        )
+        await charge_run_pages(
+            current_user.user_id,
+            page_count=page_count,
+            run_id=run_id,
+            template_id=run.template_id,
+            event_type="refine_preview",
+        )
         try:
             preview = await preview_refinement(
                 run,
@@ -231,6 +258,21 @@ async def refine_plan(
             )
         except Exception as e:
             logger.warning("Refine preview failed run_id=%s: %s", run_id, e, exc_info=True)
+            try:
+                from app.services.usage.metering import record_usage
+
+                await record_usage(
+                    current_user.user_id,
+                    -page_count,
+                    run_id=run_id,
+                    event_type="refund:refine_preview",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to refund refine_preview usage run_id=%s",
+                    run_id,
+                    exc_info=True,
+                )
 
     if preview:
         for row in preview:
@@ -277,10 +319,19 @@ async def refine_run(
         run_id,
         len(body.message),
     )
+    if parent.status == "running":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot refine a run that is still in progress",
+        )
     try:
         await check_refine_allowed(run_id, repo=repo)
     except RefineLimitError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
+
+    # Apply re-runs extraction (GPT-4o) on the upload — meter pages like a new run.
+    # check_refine_allowed only caps chat iterations; this caps LLM spend.
+    page_count = await enforce_upload_usage(current_user.user_id, parent.upload_id)
 
     try:
         run, summary = await refine_service.refine_and_start(run_id, body.message)
@@ -294,6 +345,13 @@ async def refine_run(
         raise HTTPException(status_code=502, detail=str(e))
 
     # Targeted single-field refine returns a completed run — skip re-execution
+    await charge_run_pages_or_abandon(
+        current_user.user_id,
+        run,
+        page_count=page_count,
+        template_id=run.template_id or parent.template_id,
+        event_type="refine",
+    )
     if run.status == "running":
         _schedule_run(background_tasks, run.run_id)
     logger.info(
@@ -321,9 +379,11 @@ async def get_run_status(
 ) -> RunResponse:
     """Fetch a run — poll while status is 'running'."""
     from app.api.ownership import require_run_access
+    from app.services.pipeline.orphan_reclaim import maybe_reclaim_run
 
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
     await require_run_access(run, current_user, repo)
+    run = await maybe_reclaim_run(run)
     return to_run_response(versions.hydrate_run(run))

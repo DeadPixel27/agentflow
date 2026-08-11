@@ -48,14 +48,12 @@ async def get_current_user(
     repo: DataRepository = Depends(get_repo),
 ) -> UserResponseModel:
     """
-    Extract and validate JWT from Authorization header (or access_token query).
+    Extract and validate JWT from Authorization Bearer header only.
     Returns the authenticated user. Raises 401 if missing/invalid.
     """
     token: Optional[str] = None
     if credentials is not None:
         token = credentials.credentials
-    if not token:
-        token = request.query_params.get("access_token")
 
     if not token:
         raise HTTPException(
@@ -93,6 +91,63 @@ async def get_current_user(
     return response
 
 
+async def get_document_file_user(
+    upload_id: str,
+    document_id: str,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+    repo: DataRepository = Depends(get_repo),
+) -> UserResponseModel:
+    """
+    Auth for document file GET: Bearer session JWT, or scoped ?doc_token=.
+
+    Session JWTs must not appear in query strings — use doc_token for media URLs.
+    """
+    from app.services.auth.jwt import decode_document_access_token
+
+    if credentials is not None and credentials.credentials:
+        return await get_current_user(request, credentials, repo)
+
+    doc_token = request.query_params.get("doc_token")
+    if doc_token:
+        try:
+            claims = decode_document_access_token(
+                doc_token,
+                upload_id=upload_id,
+                document_id=document_id,
+            )
+        except InvalidTokenError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from e
+
+        user_service = UserService(repo)
+        try:
+            user = user_service.fetch_user(claims["user_id"])
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found. Please sign in again.",
+            ) from e
+
+        response = UserResponseModel(
+            user_id=user.user_id,
+            name=user.name,
+            email=user.email,
+            created_at=user.created_at,
+        )
+        request.state.current_user = response
+        return response
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Please sign in.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def get_user_service(repo: DataRepository = Depends(get_repo)) -> UserService:
     return UserService(repo)
 
@@ -107,8 +162,9 @@ def get_workflow_service(
 
 def get_upload_service(
     store: DocumentStorageRepository = Depends(get_doc_store),
+    repo: DataRepository = Depends(get_repo),
 ) -> UploadService:
-    return UploadService(store)
+    return UploadService(store, repo)
 
 
 def get_auth_service(repo: DataRepository = Depends(get_repo)) -> AuthService:
@@ -160,11 +216,13 @@ MasterRefineServiceDep = Annotated[TemplateMasterRefineService, Depends(get_mast
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 InboundEmailServiceDep = Annotated[InboundEmailService, Depends(get_inbound_email_service)]
 CurrentUserDep = Annotated[UserResponseModel, Depends(get_current_user)]
+DocumentFileUserDep = Annotated[UserResponseModel, Depends(get_document_file_user)]
 
 
 __all__ = [
     "AuthServiceDep",
     "CurrentUserDep",
+    "DocumentFileUserDep",
     "DocStoreDep",
     "InboundEmailServiceDep",
     "RepoDep",
@@ -177,6 +235,7 @@ __all__ = [
     "TemplateServiceDep",
     "get_auth_service",
     "get_current_user",
+    "get_document_file_user",
     "get_doc_store",
     "get_inbound_email_service",
     "get_refine_service",

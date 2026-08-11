@@ -18,6 +18,22 @@ from tests.auth_helpers import override_current_user
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_refine_usage(monkeypatch):
+    """Keep refine API tests off live Supabase usage/storage (local .env)."""
+    monkeypatch.setattr(
+        "app.persistence.supabase_repository.is_supabase_configured",
+        lambda: False,
+    )
+
+    async def _fake_pages(_upload_id: str) -> int:
+        return 1
+
+    monkeypatch.setattr("app.api.usage_http.count_upload_pages", _fake_pages)
+    yield
+    app.dependency_overrides.clear()
+
+
 def _completed_run() -> RunResult:
     steps = [
         PlannedStep(

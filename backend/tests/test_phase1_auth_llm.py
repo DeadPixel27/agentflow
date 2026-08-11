@@ -77,7 +77,8 @@ def test_protected_route_accepts_bearer_token():
         app.dependency_overrides.clear()
 
 
-def test_protected_route_accepts_query_access_token():
+def test_protected_route_rejects_query_access_token():
+    """Session JWT in query string must not authenticate (leak vector closed)."""
     repo = MemoryRepository()
     user = UserRecord(user_id="user-1", name="Test", email="test@example.com")
     repo.save_user(user)
@@ -85,7 +86,7 @@ def test_protected_route_accepts_query_access_token():
     try:
         token = create_access_token(user.user_id, user.email)
         response = client.get(f"/api/workflows?access_token={token}")
-        assert response.status_code != 401
+        assert response.status_code == 401
     finally:
         app.dependency_overrides.clear()
 

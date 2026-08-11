@@ -143,10 +143,13 @@ def test_workflow_revert_updates_head():
 
 
 def test_workflow_run_seeds_run_scope_version(monkeypatch):
+    from app.models.domain.upload import UploadRecord
+
     repo, versions, workflows = _setup_services()
     _ensure_user(repo)
     _seed_completed_run(repo, versions)
     workflow = workflows.create_workflow_from_run("user-1", "run-root", "My workflow")
+    repo.save_upload(UploadRecord(upload_id="upload-1", user_id="user-1"))
 
     async def _fake_load(_upload_id: str):
         from app.models.domain.document import DocumentMetadata
@@ -173,7 +176,7 @@ def test_workflow_run_seeds_run_scope_version(monkeypatch):
     monkeypatch.setattr("app.services.pipeline.runner.get_repository", lambda: repo)
     monkeypatch.setattr("app.services.pipeline.runner.save_run", repo.save_run)
     monkeypatch.setattr("app.api.usage_http.enforce_upload_usage", _fake_usage)
-    monkeypatch.setattr("app.api.usage_http.record_run_usage", _noop_record)
+    monkeypatch.setattr("app.api.usage_http.charge_run_pages_or_abandon", _noop_record)
     _override(repo, versions, workflows)
 
     response = client.post(

@@ -1,14 +1,15 @@
 """Waitlist route — collect Pro tier interest. No auth required."""
 
-from __future__ import annotations
-
 import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
+
+from app.config import settings
+from app.rate_limit import limiter
 
 logger = logging.getLogger("api")
 
@@ -49,9 +50,13 @@ def _supabase_client():
 
 
 @router.post("", response_model=WaitlistResponse)
-async def join_waitlist(body: WaitlistRequest) -> WaitlistResponse:
+@limiter.limit(lambda: settings.rate_limit_waitlist)
+async def join_waitlist(
+    request: Request,
+    payload: WaitlistRequest,
+) -> WaitlistResponse:
     """Add an email to the Pro waitlist. No authentication required."""
-    email = str(body.email).strip().lower()
+    email = str(payload.email).strip().lower()
     try:
         client = _supabase_client()
 
@@ -66,12 +71,12 @@ async def join_waitlist(body: WaitlistRequest) -> WaitlistResponse:
                 {
                     "id": str(uuid4()),
                     "email": email,
-                    "name": body.name,
-                    "source": body.source,
+                    "name": payload.name,
+                    "source": payload.source,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
-            logger.info("Waitlist signup (memory): %s (source: %s)", email, body.source)
+            logger.info("Waitlist signup (memory): %s (source: %s)", email, payload.source)
             return WaitlistResponse(
                 message="Thanks! We'll notify you when Pro launches."
             )
@@ -88,12 +93,12 @@ async def join_waitlist(body: WaitlistRequest) -> WaitlistResponse:
         client.table("waitlist").insert(
             {
                 "email": email,
-                "name": body.name,
-                "source": body.source,
+                "name": payload.name,
+                "source": payload.source,
             }
         ).execute()
 
-        logger.info("Waitlist signup: %s (source: %s)", email, body.source)
+        logger.info("Waitlist signup: %s (source: %s)", email, payload.source)
         return WaitlistResponse(message="Thanks! We'll notify you when Pro launches.")
 
     except HTTPException:
