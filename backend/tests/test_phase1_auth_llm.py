@@ -37,15 +37,15 @@ def test_session_returns_jwt_token(monkeypatch):
     try:
         response = client.post(
             "/api/auth/session",
-            json={"name": "Kabir", "email": "kabir@example.com"},
+            json={"name": "DeadPixel27", "email": "deadpixel27@example.com"},
         )
         assert response.status_code == 200, response.text
         body = response.json()
         assert "token" in body
-        assert body["user"]["email"] == "kabir@example.com"
+        assert body["user"]["email"] == "deadpixel27@example.com"
         payload = decode_access_token(body["token"])
         assert payload["sub"] == body["user"]["user_id"]
-        assert payload["email"] == "kabir@example.com"
+        assert payload["email"] == "deadpixel27@example.com"
     finally:
         app.dependency_overrides.clear()
 

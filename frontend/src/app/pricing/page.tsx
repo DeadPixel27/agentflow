@@ -181,10 +181,10 @@ export default function PricingPage() {
             <p>
               Questions?{" "}
               <a
-                href="mailto:kabir@agentflow.app"
+                href="mailto:deadpixel27@agentflow.app"
                 className="text-primary underline"
               >
-                kabir@agentflow.app
+                deadpixel27@agentflow.app
               </a>
             </p>
           </div>

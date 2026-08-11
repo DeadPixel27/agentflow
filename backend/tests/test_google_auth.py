@@ -29,7 +29,7 @@ def test_email_session_forbidden_when_disabled(monkeypatch):
     try:
         response = client.post(
             "/api/auth/session",
-            json={"name": "Kabir", "email": "kabir@example.com"},
+            json={"name": "DeadPixel27", "email": "deadpixel27@example.com"},
         )
         assert response.status_code == 403
         assert "Google" in response.json()["detail"]
@@ -44,7 +44,7 @@ def test_email_register_user_forbidden_when_disabled(monkeypatch):
     try:
         response = client.post(
             "/api/users",
-            json={"name": "Kabir", "email": "kabir@example.com"},
+            json={"name": "DeadPixel27", "email": "deadpixel27@example.com"},
         )
         assert response.status_code == 403
     finally:
@@ -58,7 +58,7 @@ def test_email_session_works_when_allowed(monkeypatch):
     try:
         response = client.post(
             "/api/auth/session",
-            json={"name": "Kabir", "email": "kabir@example.com"},
+            json={"name": "DeadPixel27", "email": "deadpixel27@example.com"},
         )
         assert response.status_code == 200, response.text
         body = response.json()
@@ -128,7 +128,7 @@ def test_google_session_success(monkeypatch):
     try:
         with patch(
             "app.api.routes.auth.verify_google_id_token",
-            return_value={"email": "kabir@gmail.com", "name": "Kabir Yadav"},
+            return_value={"email": "deadpixel27@gmail.com", "name": "DeadPixel27"},
         ):
             response = client.post(
                 "/api/auth/google",
@@ -138,16 +138,16 @@ def test_google_session_success(monkeypatch):
         body = response.json()
         assert body["auth_provider"] == "google"
         assert body["is_new_user"] is True
-        assert body["user"]["email"] == "kabir@gmail.com"
-        assert body["user"]["name"] == "Kabir Yadav"
+        assert body["user"]["email"] == "deadpixel27@gmail.com"
+        assert body["user"]["name"] == "DeadPixel27"
         payload = decode_access_token(body["token"])
         assert payload["sub"] == body["user"]["user_id"]
-        assert payload["email"] == "kabir@gmail.com"
+        assert payload["email"] == "deadpixel27@gmail.com"
 
         # Second sign-in restores same user
         with patch(
             "app.api.routes.auth.verify_google_id_token",
-            return_value={"email": "kabir@gmail.com", "name": "Kabir Yadav"},
+            return_value={"email": "deadpixel27@gmail.com", "name": "DeadPixel27"},
         ):
             again = client.post(
                 "/api/auth/google",
