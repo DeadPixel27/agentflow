@@ -6,8 +6,8 @@
 |---|---|
 | **Product** | AgentFlow (Document Processor) — upload documents, describe a task (or pick a template), run an AI agent pipeline, get structured rows, refine via chat, optionally save as a reusable workflow |
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
-| **Repos** | [`backend/`](./backend/), [`frontend/`](./frontend/) |
-| **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [docs/ENGINEERING-PRINCIPLES.md](./docs/ENGINEERING-PRINCIPLES.md) · Next work: [docs/NEXT-STEPS.md](./docs/NEXT-STEPS.md) |
+| **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
+| **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
 | **Last updated** | 2026-08-10 |
 
 ---
@@ -185,7 +185,7 @@ Key files: `frontend/src/lib/pending-run.ts`, `frontend/src/lib/resume-pending-r
 
 ## 4. Backend layers & agent registry
 
-Follows [docs/ENGINEERING-PRINCIPLES.md](./docs/ENGINEERING-PRINCIPLES.md): **routes → services → persistence → domain**. Routes must not talk to Supabase/disk directly.
+Follows [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md): **routes → services → persistence → domain**. Routes must not talk to Supabase/disk directly.
 
 ```mermaid
 flowchart TB
@@ -266,7 +266,7 @@ Registry API: `register_agent`, `get_handler`, `get_agent_catalog` in `app/agent
 
 ## 5. Database — ER & table catalog
 
-**Source of truth:** [`backend/supabase/schema.sql`](./backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](./backend/supabase/migrations/) (`001`–`011`) for existing DBs.
+**Source of truth:** [`backend/supabase/schema.sql`](../backend/supabase/schema.sql) for fresh installs + incremental [`backend/supabase/migrations/`](../backend/supabase/migrations/) (`001`–`013`) for existing DBs.
 
 **Footnote — schema drift:** column `workflow_runs.transient_refinement` exists in migration `006` but is not in `schema.sql`. Prefer migrations when upgrading a live project; sync `schema.sql` when convenient.
 
@@ -775,8 +775,8 @@ flowchart LR
 
 Checklist mindset: apply SQL migrations / `schema.sql`, create Storage buckets (`documents`, `user-templates`), set all backend secrets on Railway, set `NEXT_PUBLIC_*` on Vercel, align `CORS_ORIGINS` + Google client ID for the production origin, keep `AUTH_ALLOW_EMAIL=false`.
 
-See [docs/NEXT-STEPS.md](./docs/NEXT-STEPS.md) for current ship order.
+See [NEXT-STEPS.md](./NEXT-STEPS.md) for current ship order. Deploy details: [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
-*This document is the architecture study guide. For endpoint request/response shapes see [SPEC.md](./SPEC.md). For agent expansion plans see [docs/AGENTS.md](./docs/AGENTS.md).*
+*This document is the architecture study guide. For endpoint request/response shapes see [SPEC.md](./SPEC.md). For agent expansion plans see [AGENTS.md](./AGENTS.md).*

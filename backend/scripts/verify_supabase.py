@@ -83,7 +83,7 @@ def main() -> int:
     if not is_supabase_configured():
         print("FAIL: Supabase not configured.")
         print("  Set SUPABASE_URL and SUPABASE_SECRET_KEY in backend/.env")
-        print("  See backend/SUPABASE_SETUP.md")
+        print("  See docs/SUPABASE_SETUP.md")
         return 1
 
     ok, detail = SupabaseRepository().health_check()
@@ -113,7 +113,7 @@ def main() -> int:
     if bucket_failures:
         print(f"\nFAIL: Storage bucket issues: {', '.join(bucket_failures)}")
         print("  Create private buckets and run supabase/migrations/013_storage_private.sql")
-        print("  See backend/SUPABASE_SETUP.md section 5")
+        print("  See docs/SUPABASE_SETUP.md section 5")
         return 1
 
     print("\nAll checks passed. Restart uvicorn — /api/health should show persistence=supabase")

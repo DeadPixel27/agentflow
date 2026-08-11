@@ -492,4 +492,4 @@ async def test_rules_flags_high_value():
 
 ---
 
-*Transcribed from docs/_archive/source-screenshots/engineering-patterns/ — Aug 5, 2026*
+*Transcribed from engineering-patterns screenshot session — Aug 5, 2026*

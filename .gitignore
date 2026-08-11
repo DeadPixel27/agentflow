@@ -9,7 +9,7 @@ venv/
 # Uploaded files (local dev only)
 backend/uploads/
 
-# Local test PDFs (not part of the repo)
+# Local test PDFs / personal dumps (not part of the repo)
 New Folder With Items/
 
 # OS / editor
@@ -17,7 +17,7 @@ New Folder With Items/
 .idea/
 .vscode/
 
-# Frontend (when added)
+# Frontend
 node_modules/
 .next/
 out/
@@ -27,13 +27,14 @@ frontend/.env.local
 # Local duplicate docs folder (canonical docs live in docs/)
 docs copy/
 
-# Screenshot archives — content transcribed to docs/*.md; do not commit JPEGs
-docs/_archive/source-screenshots/**
-!docs/_archive/source-screenshots/README.md
+# Screenshot / WhatsApp prompt dumps (content lives in docs/*.md)
+docs/_archive/
 frontend-v2-opus4.6/
 frontend-v3-opus4.6/
 backend-v2-opus4.6/
 backend-v3-opus4.6/
+backend-launch-prompt/
+frontend-launch-prompt/
 
 # Google service account keys (never commit)
 backend/secrets/

@@ -54,11 +54,11 @@ pytest tests/ -v
 
 ### Manual API walkthrough
 
-See [backend/MANUAL_API_TEST.md](backend/MANUAL_API_TEST.md).
+Use Swagger at http://localhost:8000/docs once the backend is running.
 
 ### Supabase (persistence)
 
-See [backend/SUPABASE_SETUP.md](backend/SUPABASE_SETUP.md).
+See [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
 ### Frontend
 
@@ -85,33 +85,23 @@ GET  /api/workflows/{id}/runs     # run history
 ## Project structure
 
 ```
-backend/
-├── app/                  # FastAPI application
-├── supabase/             # DB schema + migrations
-├── tests/
-└── samples/
-frontend/
-├── src/app/              # Next.js pages (/, /results/[runId])
-├── src/components/       # UI components
-└── src/lib/              # API client
-SPEC.md                   # Product spec (also in docs/SPEC.md)
-ARCHITECTURE.md           # System architecture diagrams
-docs/                     # Engineering principles, gaps, roadmap (on GitHub)
+backend/     # FastAPI app, supabase/, tests/
+frontend/    # Next.js app
+docs/        # All reference documentation (start at docs/README.md)
+README.md    # This file
 ```
 
 ## Documentation
 
-| Doc | Purpose |
-|-----|---------|
-| [SPEC.md](SPEC.md) | Full product spec + master tracker |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture diagrams (Mermaid) |
-| [docs/README.md](docs/README.md) | Documentation index |
-| [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code rules for contributors |
-| [backend/SUPABASE_SETUP.md](backend/SUPABASE_SETUP.md) | Supabase Postgres + Storage setup |
-| [backend/DOCUMENT_STORAGE.md](backend/DOCUMENT_STORAGE.md) | Persistence registry |
-| [frontend/FRONTEND.md](frontend/FRONTEND.md) | Next.js directory guide |
+**Everything is under [`docs/`](docs/README.md).**
 
-Screenshot JPEGs under `docs/_archive/source-screenshots/` are **not** committed (transcribed into markdown).
+| Start here | |
+|------------|--|
+| [docs/README.md](docs/README.md) | Index |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Prod / secrets |
+| [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | Current ship order |
+| [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) | Code rules |
 
 ## Environment variables
 
