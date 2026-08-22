@@ -8,7 +8,7 @@
 | **Stack** | Next.js (App Router) ↔ FastAPI ↔ Groq (plan/refine) + OpenAI GPT-4o (extract) + RapidOCR/Tesseract ↔ Supabase Postgres + Storage |
 | **Repos** | [`backend/`](../backend/), [`frontend/`](../frontend/) |
 | **Related** | Product/API detail: [SPEC.md](./SPEC.md) · Engineering rules: [ENGINEERING-PRINCIPLES.md](./ENGINEERING-PRINCIPLES.md) · Next work: [NEXT-STEPS.md](./NEXT-STEPS.md) |
-| **Last updated** | 2026-08-11 |
+| **Last updated** | 2026-08-16 |
 
 ---
 
@@ -283,6 +283,7 @@ erDiagram
   users ||--o{ inbound_addresses : owns
   users ||--o{ usage_events : meters
   users ||--o{ analytics_events : emits
+  users ||--o{ audit_events : audits
 
   uploads ||--o{ workflow_runs : referenced_by
 
@@ -412,6 +413,12 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | **Purpose** | Product analytics (runs, errors, durations) |
 | **FK** | `user_id` SET NULL; `run_id` SET NULL |
 
+#### `audit_events`
+| | |
+|---|---|
+| **Purpose** | Who did what (auth, upload, run, refine, workflow, delivery). No document payloads. |
+| **FK** | `actor_user_id` SET NULL |
+
 ### 5.3 Migration timeline
 
 | # | Adds |
@@ -431,6 +438,7 @@ Soft links (`parent_template_id`, `template_id`) are **text**, not FKs — maste
 | 013 | private storage policies |
 | 014 | `workflows.default_sheet_name` |
 | 015 | `waitlist.feedback` |
+| 016 | `audit_events` |
 
 ---
 

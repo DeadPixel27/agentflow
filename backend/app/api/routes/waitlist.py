@@ -117,8 +117,7 @@ async def join_waitlist(
                     prior = entry.get("source") or "normal"
                     if prior != payload.source:
                         logger.info(
-                            "Waitlist re-interest (memory): %s prior=%s new=%s",
-                            email,
+                            "Waitlist re-interest (memory): prior=%s new=%s",
                             prior,
                             payload.source,
                         )
@@ -138,10 +137,15 @@ async def join_waitlist(
                 }
             )
             logger.info(
-                "Waitlist signup (memory): %s (source: %s, feedback_len: %d)",
-                email,
+                "Waitlist signup (memory): source=%s feedback_len=%d",
                 payload.source,
                 len(feedback),
+            )
+            from app.services.audit.events import log_audit
+
+            await log_audit(
+                "waitlist.joined",
+                metadata={"source": payload.source, "feedback_len": len(feedback)},
             )
             return WaitlistResponse(
                 message="Thanks! We'll notify you when Pro launches."
@@ -157,8 +161,7 @@ async def join_waitlist(
             prior = existing.data[0].get("source") or "normal"
             if prior != payload.source:
                 logger.info(
-                    "Waitlist re-interest: %s prior=%s new=%s",
-                    email,
+                    "Waitlist re-interest: prior=%s new=%s",
                     prior,
                     payload.source,
                 )
@@ -181,10 +184,15 @@ async def join_waitlist(
         ).execute()
 
         logger.info(
-            "Waitlist signup: %s (source: %s, feedback_len: %d)",
-            email,
+            "Waitlist signup: source=%s feedback_len=%d",
             payload.source,
             len(feedback),
+        )
+        from app.services.audit.events import log_audit
+
+        await log_audit(
+            "waitlist.joined",
+            metadata={"source": payload.source, "feedback_len": len(feedback)},
         )
         return WaitlistResponse(message="Thanks! We'll notify you when Pro launches.")
 

@@ -22,7 +22,7 @@ BANK_STATEMENT_TEMPLATE = PipelineTemplate(
     extraction_instructions="""Extract account details and ALL transactions from the bank statement.
 
 FIELD LOCATIONS AND GUIDANCE:
-- account_holder: Name on the account. Usually near top, labeled "Account Holder", "Name", "Customer". Return full name.
+- account_holder: Name on the account. Look for "Account Holder", "Name", "Customer", or the person's name in the postal address block at the top (often the first line before the street address, e.g. "Jia Yi Koh" above "123 Orchard Road"). Return full name. Do not return the bank name.
 - account_number: Account number as printed. Often partially masked (e.g. "****1234", "XXXX-5678"). Extract exactly as shown.
 - bank_name: Name of the financial institution. Usually in header/logo area.
 - statement_period: The date range this statement covers. Look for "Statement Period", "From/To", "Period". Return as a string: "YYYY-MM-DD to YYYY-MM-DD".
@@ -45,14 +45,7 @@ IMPORTANT:
 EXAMPLE EXTRACTION:
 Input: "FIRST NATIONAL BANK\\nAccount: John Smith | ****4567\\nPeriod: Mar 1-31, 2024\\nOpening: $5,230.00\\n03/01 PAYROLL DEPOSIT  +2,500.00\\n03/05 AMAZON.COM -89.99\\n03/10 RENT PAYMENT  -1,500.00\\nClosing: $6,140.01"
 Output: {"account_holder": "John Smith", "account_number": "****4567", "bank_name": "First National Bank", "statement_period": "2024-03-01 to 2024-03-31", "currency": "USD", "opening_balance": 5230.00, "closing_balance": 6140.01, "transactions": [{"date": "2024-03-01", "description": "Payroll Deposit", "amount": 2500.00, "type": "credit"}, {"date": "2024-03-05", "description": "Amazon.com", "amount": 89.99, "type": "debit"}, {"date": "2024-03-10", "description": "Rent Payment", "amount": 1500.00, "type": "debit"}]}""",
-    rules=[
-        {
-            "field": "transactions",
-            "operator": "gt",
-            "value": 5000,
-            "flag_name": "large_transaction",
-        },
-    ],
+    rules=[],
     output_format="csv",
     suggested_steps=[
         "processor.ocr",

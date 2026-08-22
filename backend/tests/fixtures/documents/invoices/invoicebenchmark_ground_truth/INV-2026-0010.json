@@ -1,0 +1,97 @@
+{
+  "invoice_id": "INV-2026-0010",
+  "vendor": "Prestige Worldwide Ltd",
+  "vendor_country": "GB",
+  "vendor_address": {
+    "street": "7 Merrowdale Lane",
+    "postal_code": "EC2V 5AQ",
+    "city": "London"
+  },
+  "recipient": "Donaustadt Digitalisierung GmbH",
+  "recipient_country": "AT",
+  "recipient_address": {
+    "street": "Feldspatplatz 9",
+    "postal_code": "5020",
+    "city": "Salzburg"
+  },
+  "date": "2026-03-25",
+  "due_date": "2026-04-24",
+  "line_items": [
+    {
+      "description": "Emergency weekend support call (45 minutes, felt longer)",
+      "quantity": 10,
+      "unit_price": "123.20",
+      "vat_rate": "0.20",
+      "amount": "1232.00"
+    },
+    {
+      "description": "Compliance audit preparation (regulations may have changed since)",
+      "quantity": 1,
+      "unit_price": "46465.00",
+      "vat_rate": "0.20",
+      "amount": "46465.00"
+    },
+    {
+      "description": "Consulting hours — Senior Partner",
+      "quantity": 3,
+      "unit_price": "19670.30",
+      "vat_rate": "0.20",
+      "amount": "59010.90"
+    },
+    {
+      "description": "Software licence renewal — 50 seats",
+      "quantity": 1,
+      "unit_price": "22360.50",
+      "vat_rate": "0.20",
+      "amount": "22360.50"
+    },
+    {
+      "description": "Documentation cleanup (Sisyphean endeavour)",
+      "quantity": 2,
+      "unit_price": "23033.10",
+      "vat_rate": "0.20",
+      "amount": "46066.20"
+    },
+    {
+      "description": "External reviewer honorarium",
+      "quantity": 4,
+      "unit_price": "4689.80",
+      "vat_rate": "0.20",
+      "amount": "18759.20"
+    },
+    {
+      "description": "Consulting hours — Associate",
+      "quantity": 1,
+      "unit_price": "594.60",
+      "vat_rate": "0.20",
+      "amount": "594.60"
+    }
+  ],
+  "subtotal": "194488.40",
+  "vat_rate": "0.20",
+  "vat_amount": "38897.68",
+  "discount": {
+    "type": "percentage",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "early payment discount",
+    "conditional": false
+  },
+  "discount_amount": "3889.77",
+  "total": "229496.31",
+  "currency": "EUR",
+  "payment_terms": "Net 30 days",
+  "bank_details": "Barclays | IBAN: GB10 4886 3703 5516 1208 91 | BIC: BARCGB22XXX",
+  "variants": {
+    "vat_variant": "explicit_excluded",
+    "discount_variant": "explicit_percentage",
+    "number_format": "german",
+    "layout": "table",
+    "consistency": "correct",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "194488.40",
+  "rendered_total": "229496.31",
+  "error_note": null,
+  "is_credit_note": false
+}

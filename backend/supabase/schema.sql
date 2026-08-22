@@ -180,6 +180,23 @@ create table if not exists analytics_events (
 create index if not exists idx_analytics_events_type_date
     on analytics_events(event_type, created_at);
 
+create table if not exists audit_events (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz not null default now(),
+    actor_user_id uuid references users(id) on delete set null,
+    action text not null,
+    resource_type text,
+    resource_id text,
+    request_id text,
+    metadata jsonb not null default '{}'
+);
+
+create index if not exists idx_audit_events_actor_date
+    on audit_events(actor_user_id, created_at);
+
+create index if not exists idx_audit_events_action_date
+    on audit_events(action, created_at);
+
 alter table users add column if not exists is_admin boolean not null default false;
 
 -- Uploads registry (owner binding for IDOR prevention)

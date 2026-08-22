@@ -71,7 +71,7 @@ class InboundEmailService:
         address = self.resolve_address(recipient)
 
         if not attachments:
-            logger.warning("Inbound from %s has no attachments", sender)
+            logger.warning("Inbound has no attachments")
             raise ValueError("Email has no attachments to process")
 
         from app.services.usage.page_count import (
@@ -100,10 +100,10 @@ class InboundEmailService:
         )
 
         logger.info(
-            "Inbound email from %s → workflow %s, upload %s, user %s",
-            sender,
+            "Inbound email → workflow %s, upload %s, user %s, attachments=%d",
             address.workflow_id,
             upload_id,
             address.user_id,
+            len(attachments),
         )
         return upload_id, address.workflow_id, sender, address.user_id

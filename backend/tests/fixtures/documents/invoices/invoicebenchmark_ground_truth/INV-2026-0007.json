@@ -1,0 +1,83 @@
+{
+  "invoice_id": "INV-2026-0007",
+  "vendor": "Stark Industries Europe Ltd",
+  "vendor_country": "GB",
+  "vendor_address": {
+    "street": "19 Whitcomb-Stead Mews",
+    "postal_code": "E1 6BG",
+    "city": "London"
+  },
+  "recipient": "Groupe Industriel Dufresne S.A.",
+  "recipient_country": "FR",
+  "recipient_address": {
+    "street": "12 avenue Verrebrille",
+    "postal_code": "75008",
+    "city": "Paris"
+  },
+  "date": "2026-03-09",
+  "due_date": "2026-03-09",
+  "line_items": [
+    {
+      "description": "Software licence renewal — 50 seats",
+      "quantity": 1,
+      "unit_price": "39758.60",
+      "vat_rate": "0.20",
+      "amount": "39758.60"
+    },
+    {
+      "description": "Backup verification (annual)",
+      "quantity": 100,
+      "unit_price": "128.30",
+      "vat_rate": "0.20",
+      "amount": "12830.00"
+    },
+    {
+      "description": "Training materials — onboarding programme",
+      "quantity": 1,
+      "unit_price": "36391.50",
+      "vat_rate": "0.20",
+      "amount": "36391.50"
+    },
+    {
+      "description": "Travel expenses (London–Vienna)",
+      "quantity": 2,
+      "unit_price": "2738.70",
+      "vat_rate": "0.20",
+      "amount": "5477.40"
+    },
+    {
+      "description": "Quarterly newsletter design",
+      "quantity": 1,
+      "unit_price": "23080.60",
+      "vat_rate": "0.20",
+      "amount": "23080.60"
+    }
+  ],
+  "subtotal": "117538.10",
+  "vat_rate": "0.20",
+  "vat_amount": "23507.62",
+  "discount": {
+    "type": "percentage",
+    "value": "0.075",
+    "applied_to": "subtotal",
+    "description": "adjustment per framework agreement ref. FA-2023-585",
+    "conditional": false
+  },
+  "discount_amount": "8815.36",
+  "total": "132230.36",
+  "currency": "EUR",
+  "payment_terms": "Due upon receipt",
+  "bank_details": "HSBC UK | IBAN: GB46 3948 0242 2322 9834 76 | BIC: HBUKGB4BXXX",
+  "variants": {
+    "vat_variant": "implicit_no_rate",
+    "discount_variant": "obfuscated",
+    "number_format": "german",
+    "layout": "paragraph",
+    "consistency": "correct",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "117538.10",
+  "rendered_total": "132230.36",
+  "error_note": null,
+  "is_credit_note": false
+}

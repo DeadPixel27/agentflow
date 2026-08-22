@@ -119,9 +119,9 @@ async def complete_json(
                 last_exc = RuntimeError("LLM returned invalid JSON")
                 last_exc.__cause__ = e
                 logger.error(
-                    "Groq model=%s returned invalid JSON: %s",
+                    "Groq model=%s returned invalid JSON (%d chars)",
                     model_name,
-                    raw[:500],
+                    len(raw),
                 )
         except BaseException as exc:
             last_exc = exc

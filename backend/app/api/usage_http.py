@@ -84,6 +84,19 @@ async def charge_run_pages(
     except Exception as e:
         logger.warning("Failed to record run_started analytics: %s", e)
 
+    try:
+        from app.services.audit.events import log_audit
+
+        await log_audit(
+            "run.started",
+            actor_user_id=user_id,
+            resource_type="run",
+            resource_id=run_id,
+            metadata={"page_count": page_count, "event_type": event_type},
+        )
+    except Exception as e:
+        logger.warning("Failed to record run.started audit: %s", e)
+
 
 async def charge_run_pages_or_abandon(
     user_id: str,
@@ -138,6 +151,18 @@ async def charge_extract_pages(user_id: str, page_count: int) -> None:
         )
     except Exception as e:
         logger.warning("Failed to record extract analytics: %s", e)
+
+    try:
+        from app.services.audit.events import log_audit
+
+        await log_audit(
+            "extract.completed",
+            actor_user_id=user_id,
+            resource_type="extract",
+            metadata={"page_count": page_count},
+        )
+    except Exception as e:
+        logger.warning("Failed to record extract audit: %s", e)
 
 
 async def refund_extract_pages(user_id: str, page_count: int) -> None:
