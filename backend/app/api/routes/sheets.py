@@ -47,6 +47,16 @@ async def push_run_to_sheets(
         await refund_sheets_usage(current_user.user_id, run_id=run_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "delivery.sheets",
+        actor_user_id=current_user.user_id,
+        resource_type="run",
+        resource_id=run_id,
+        metadata={"spreadsheet_id": result.spreadsheet_id, "source": "manual"},
+    )
+
     return SheetsPushResponse(
         status="pushed",
         spreadsheet_id=result.spreadsheet_id,

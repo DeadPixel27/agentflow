@@ -93,9 +93,8 @@ async def _send_default_email(
     try:
         result = await send_results_email(request)
         logger.info(
-            "Auto-emailed run %s to %s (email_id=%s)",
+            "Auto-emailed run %s (email_id=%s)",
             run.run_id,
-            to_email,
             result.email_id,
         )
         try:
@@ -109,6 +108,18 @@ async def _send_default_email(
                     "workflow_id": run.workflow_id,
                     "email_id": result.email_id,
                 },
+            )
+        except Exception:
+            pass
+        try:
+            from app.services.audit.events import log_audit
+
+            await log_audit(
+                "delivery.email",
+                actor_user_id=run.user_id,
+                resource_type="run",
+                resource_id=run.run_id,
+                metadata={"email_id": result.email_id, "source": "workflow_default"},
             )
         except Exception:
             pass
@@ -211,6 +222,21 @@ async def _push_default_sheets(
                     "spreadsheet_id": result.spreadsheet_id,
                     "sheet_name": result.sheet_name,
                     "rows_written": result.rows_written,
+                },
+            )
+        except Exception:
+            pass
+        try:
+            from app.services.audit.events import log_audit
+
+            await log_audit(
+                "delivery.sheets",
+                actor_user_id=run.user_id,
+                resource_type="run",
+                resource_id=run.run_id,
+                metadata={
+                    "spreadsheet_id": result.spreadsheet_id,
+                    "source": "workflow_default",
                 },
             )
         except Exception:

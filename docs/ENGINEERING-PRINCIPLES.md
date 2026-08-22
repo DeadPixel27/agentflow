@@ -441,7 +441,8 @@ async def test_rules_flags_high_value():
 - **Always sanitize user input** before sending to LLM (length limits, control character stripping).
 - **Always use HTTPS in production.**
 - **Always set CORS origins explicitly** — never use `allow_origins=["*"]` in production.
-- **Delete uploaded files after processing** (or within 24 hours) — privacy commitment.
+- **Do not log document text, extracted field values, or prompt tails** in production stdout (IDs, timings, hashes only).
+- **File retention:** keep uploads and run results for launch (history + refine). Auto-delete / TTL is **not** live — do not claim 24-hour deletion. See [NEXT-STEPS.md](./NEXT-STEPS.md) and [SCALING-AND-JOBS.md](./SCALING-AND-JOBS.md).
 
 ---
 

@@ -399,6 +399,15 @@ async def refine_run(
         run_id=run.run_id,
         metadata={"parent_run_id": run_id},
     )
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "run.refined",
+        actor_user_id=current_user.user_id,
+        resource_type="run",
+        resource_id=run.run_id,
+        metadata={"parent_run_id": run_id},
+    )
     return RunRefineResponse(run=to_run_response(run), refine_summary=summary)
 
 

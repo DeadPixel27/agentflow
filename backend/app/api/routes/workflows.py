@@ -81,6 +81,14 @@ async def save_workflow(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "workflow.created",
+        actor_user_id=current_user.user_id,
+        resource_type="workflow",
+        resource_id=workflow.workflow_id,
+    )
     return _to_workflow_response(workflow)
 
 
@@ -107,6 +115,15 @@ async def save_workflow_from_run(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "workflow.created",
+        actor_user_id=current_user.user_id,
+        resource_type="workflow",
+        resource_id=workflow.workflow_id,
+        metadata={"source": "from_run", "run_id": run_id},
+    )
     return _to_workflow_response(workflow)
 
 
@@ -301,3 +318,12 @@ async def delete_workflow(
         workflows.delete_workflow(workflow_id)
     except WorkflowNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "workflow.deleted",
+        actor_user_id=current_user.user_id,
+        resource_type="workflow",
+        resource_id=workflow_id,
+    )

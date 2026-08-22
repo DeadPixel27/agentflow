@@ -132,8 +132,19 @@ async def receive_inbound_email(
             template_id=getattr(run, "template_id", None),
             event_type="inbound_email",
         )
+        from app.logging_context import set_user_id
+        from app.services.audit.events import log_audit
+
+        set_user_id(owner_user_id)
         background_tasks.add_task(execute_run, run.run_id)
         _mark_token_seen(token)
+        await log_audit(
+            "inbound.received",
+            actor_user_id=owner_user_id,
+            resource_type="run",
+            resource_id=run.run_id,
+            metadata={"workflow_id": workflow_id, "upload_id": upload_id},
+        )
         return {"status": "processing", "run_id": run.run_id}
     except InboundAddressNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

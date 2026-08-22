@@ -164,9 +164,9 @@ async def complete_json(
                 last_exc = RuntimeError("LLM returned invalid JSON")
                 last_exc.__cause__ = e
                 logger.error(
-                    "OpenAI model=%s returned invalid JSON: %s",
+                    "OpenAI model=%s returned invalid JSON (%d chars)",
                     model_name,
-                    raw[:500],
+                    len(raw),
                 )
         except OpenAIBudgetError:
             raise

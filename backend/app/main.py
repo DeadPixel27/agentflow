@@ -47,6 +47,7 @@ from app.api.routes import (
 )
 from app.config import settings
 from app.logging_config import setup_logging
+from app.middleware.request_context import RequestContextMiddleware
 from app.persistence.templates.bootstrap import ensure_pipeline_templates_seeded
 from app.rate_limit import limiter
 
@@ -84,6 +85,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(RequestContextMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

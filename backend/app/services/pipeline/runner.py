@@ -116,11 +116,12 @@ async def start_run(
     )
     save_run(run)
     logger.info(
-        "Run %s started — upload_id=%s, %d step(s), parent=%s",
+        "Run %s started — upload_id=%s, %d step(s), parent=%s user=%s",
         run_id,
         upload_id,
         len(planned),
         parent_run_id,
+        user_id,
     )
     return run
 
@@ -140,6 +141,11 @@ async def execute_run(run_id: str) -> None:
         return
 
     user_id = await get_user_id_for_run(run_id)
+    from app.logging_context import set_run_id, set_user_id
+
+    set_run_id(run_id)
+    if user_id:
+        set_user_id(user_id)
     try:
         page_count = await count_upload_pages(run.upload_id)
     except Exception:
@@ -282,7 +288,19 @@ async def execute_run(run_id: str) -> None:
                     template_id=run.template_id,
                     page_count=page_count,
                     duration_ms=duration["ms"],
-                    error=str(e),
+                    error=type(e).__name__,
+                )
+            except Exception:
+                pass
+            try:
+                from app.services.audit.events import log_audit
+
+                await log_audit(
+                    "run.failed",
+                    actor_user_id=user_id,
+                    resource_type="run",
+                    resource_id=run_id,
+                    metadata={"error": type(e).__name__, "step": step.agent_type},
                 )
             except Exception:
                 pass
@@ -321,6 +339,18 @@ async def execute_run(run_id: str) -> None:
             template_id=run.template_id,
             page_count=page_count,
             duration_ms=duration["ms"],
+        )
+    except Exception:
+        pass
+    try:
+        from app.services.audit.events import log_audit
+
+        await log_audit(
+            "run.completed",
+            actor_user_id=user_id,
+            resource_type="run",
+            resource_id=run_id,
+            metadata={"page_count": page_count, "duration_ms": duration["ms"]},
         )
     except Exception:
         pass

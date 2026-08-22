@@ -72,6 +72,9 @@ async def get_current_user(
         ) from e
 
     user_id = payload["sub"]
+    from app.logging_context import set_user_id
+
+    set_user_id(user_id)
     user_service = UserService(repo)
     try:
         user = user_service.fetch_user(user_id)

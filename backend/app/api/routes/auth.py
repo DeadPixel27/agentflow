@@ -4,9 +4,11 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dependencies import AuthServiceDep
 from app.config import settings
+from app.logging_context import set_user_id
 from app.models.api.auth import GoogleSignInRequest, SignInRequest, SignInResponse
 from app.models.api.users import UserResponse
 from app.rate_limit import limiter
+from app.services.audit.events import log_audit
 from app.services.auth.google_tokens import InvalidGoogleTokenError, verify_google_id_token
 from app.services.auth.jwt import create_access_token
 
@@ -30,6 +32,24 @@ def _require_email_auth() -> None:
         )
 
 
+async def _session_response(user, is_new: bool, provider: str) -> SignInResponse:
+    token = create_access_token(user.user_id, user.email)
+    set_user_id(user.user_id)
+    await log_audit(
+        "auth.signup" if is_new else "auth.login",
+        actor_user_id=user.user_id,
+        resource_type="user",
+        resource_id=user.user_id,
+        metadata={"provider": provider},
+    )
+    return SignInResponse(
+        user=_to_user_response(user),
+        is_new_user=is_new,
+        auth_provider=provider,
+        token=token,
+    )
+
+
 @router.post("/session", response_model=SignInResponse)
 @limiter.limit(settings.rate_limit_auth)
 async def create_session(
@@ -46,14 +66,7 @@ async def create_session(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    token = create_access_token(user.user_id, user.email)
-
-    return SignInResponse(
-        user=_to_user_response(user),
-        is_new_user=is_new,
-        auth_provider=auth.provider_name,
-        token=token,
-    )
+    return await _session_response(user, is_new, auth.provider_name)
 
 
 @router.post("/google", response_model=SignInResponse)
@@ -80,11 +93,4 @@ async def create_google_session(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    token = create_access_token(user.user_id, user.email)
-
-    return SignInResponse(
-        user=_to_user_response(user),
-        is_new_user=is_new,
-        auth_provider="google",
-        token=token,
-    )
+    return await _session_response(user, is_new, "google")

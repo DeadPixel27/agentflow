@@ -51,6 +51,16 @@ async def email_run_results(
         await refund_email_usage(current_user.user_id, run_id=run_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    from app.services.audit.events import log_audit
+
+    await log_audit(
+        "delivery.email",
+        actor_user_id=current_user.user_id,
+        resource_type="run",
+        resource_id=run_id,
+        metadata={"email_id": result.email_id, "source": "manual"},
+    )
+
     return EmailResultsResponse(
         status="sent",
         email_id=result.email_id,

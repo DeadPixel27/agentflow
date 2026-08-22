@@ -26,14 +26,14 @@ RECEIPT_TEMPLATE = PipelineTemplate(
     extraction_instructions="""Extract all fields from the receipt. Receipts are often low-quality scans or phone photos with faded thermal paper text - extract what you can clearly read, return null for anything unclear.
 
 FIELD LOCATIONS AND GUIDANCE:
-- merchant_name: Usually at the very top, largest text, often the store/restaurant name. Return in Title Case.
+- merchant_name: Usually at the very top, largest text, often the store/restaurant name. Return in Title Case. If a franchise brand is shown (e.g. McDonald's, Starbucks) but the legal entity is not legible, use the brand name.
 - store_address: Below merchant name. Single string with commas. Null if not legible.
 - receipt_date: Look for date near top or bottom. Formats vary: "03/15/24", "2024-03-15", "Mar 15 2024", "15.03.2024". Return as YYYY-MM-DD.
 - receipt_number: Look for "Receipt #", "Trans #", "Transaction", "Check #", "Ticket". Often near top or bottom. Extract exactly as printed. Null if not present - many receipts don't have one.
 - currency: Infer from symbol or locale. "$" -> "USD" unless context suggests otherwise (CAD, AUD).
 - subtotal: Amount before tax. Look for "Subtotal", "Sub". Plain number.
 - tax_amount: Look for "Tax", "VAT", "GST", "HST". If multiple tax lines, SUM them. Null if no tax line.
-- total_amount: Final amount. Usually largest number, near bottom, labeled "Total", "Amount", "Grand Total". Plain number.
+- total_amount: Final amount paid/charged. Look for "Total", "Amount", "Grand Total", "Amount Paid", "Amount paid", "Paid". The value may be on the next line after the label. Plain number. Include tip if the receipt shows one final total after tip.
 - payment_method: How it was paid. Look for "VISA", "MASTERCARD", "AMEX", "CASH", "DEBIT", card logos. Return one of: "credit_card", "debit_card", "cash", "mobile_payment", "other". Null if unclear.
 - card_last_four: Last 4 digits of card number. ONLY extract if clearly printed (e.g. "****1234", "XXXX-XXXX-XXXX-5678"). Do NOT guess. Null if not visible.
 - expense_category: Infer from merchant name and items. One of: "meals", "transport", "office_supplies", "groceries", "entertainment", "travel", "utilities", "other".

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Loader2, Play } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Loader2, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -26,6 +26,14 @@ import { toastError } from "@/lib/toast";
 import { ensureUser, SignInRequiredError } from "@/lib/user-session";
 import { cn } from "@/lib/utils";
 
+/** SMB money-ops templates shown prominently at launch. */
+const PRIMARY_TEMPLATE_IDS = new Set([
+  "invoice",
+  "receipt",
+  "purchase_order",
+  "bank_statement",
+]);
+
 export default function HomePage() {
   const router = useRouter();
   const { openSignIn } = useSignIn();
@@ -35,25 +43,15 @@ export default function HomePage() {
     null,
   );
   const [templates, setTemplates] = useState<PipelineTemplateSummary[]>([]);
+  const [showMoreTemplates, setShowMoreTemplates] = useState(false);
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const [usageLimitMsg, setUsageLimitMsg] = useState("");
   const resumeStarted = useRef(false);
+  const templatesLoaded = useRef(false);
 
-  useEffect(() => {
-    listTemplates()
-      .then((data) => setTemplates(data.templates))
-      .catch(() => {
-        /* templates optional */
-      });
-  }, []);
-
-  async function handleSelectTemplate(templateId: string) {
-    if (selectedTemplateId === templateId) {
-      setSelectedTemplateId(null);
-      return;
-    }
+  const applyTemplate = useCallback(async (templateId: string) => {
     setSelectedTemplateId(templateId);
     try {
       const template = await getTemplate(templateId);
@@ -61,6 +59,32 @@ export default function HomePage() {
     } catch {
       /* keep current task */
     }
+  }, []);
+
+  useEffect(() => {
+    if (templatesLoaded.current) return;
+    templatesLoaded.current = true;
+    listTemplates()
+      .then((data) => setTemplates(data.templates))
+      .catch(() => {
+        /* templates optional */
+      });
+  }, []);
+
+  const primaryTemplates = templates.filter((t) =>
+    PRIMARY_TEMPLATE_IDS.has(t.template_id),
+  );
+  const moreTemplates = templates.filter(
+    (t) => !PRIMARY_TEMPLATE_IDS.has(t.template_id),
+  );
+
+  async function handleSelectTemplate(templateId: string) {
+    if (selectedTemplateId === templateId) {
+      setSelectedTemplateId(null);
+      setTask("");
+      return;
+    }
+    await applyTemplate(templateId);
   }
 
   const promptSignIn = useCallback(
@@ -179,7 +203,7 @@ export default function HomePage() {
       toastError("Add at least one document.");
       return;
     }
-    if (!task.trim()) {
+    if (!selectedTemplateId && !task.trim()) {
       toastError("Describe what you want extracted or done.");
       return;
     }
@@ -204,7 +228,6 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    // Backup if a pending intent remains after a failed dialog resume.
     if (!getAccessToken()) return;
     if (resumeStarted.current) return;
     resumeStarted.current = true;
@@ -235,12 +258,13 @@ export default function HomePage() {
         <div className="w-full max-w-[700px] space-y-6">
           <div className="text-center space-y-3">
             <h1 className="font-serif text-[30px] font-semibold leading-tight tracking-tight">
-              Extract structured data from{" "}
-              <em className="text-primary not-italic">any document</em>
+              Extract AP documents.{" "}
+              <em className="text-primary not-italic">Send them anywhere.</em>
             </h1>
-            <p className="text-sm text-muted-foreground max-w-[520px] mx-auto">
-              Upload invoices, receipts, or reports. AI extracts fields and
-              returns structured JSON or CSV.
+            <p className="text-sm text-muted-foreground max-w-[540px] mx-auto">
+              Upload invoices, receipts, POs, and bank statements. Nexora extracts
+              structured fields, pushes to Google Sheets, emails results to your
+              team — and inbound email processing is coming soon.
             </p>
           </div>
 
@@ -248,24 +272,68 @@ export default function HomePage() {
 
           {templates.length > 0 && (
             <div className="space-y-3">
+              <p className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Document type
+              </p>
               <div className="flex flex-wrap gap-2 justify-center">
-                {templates.map((template) => (
+                {primaryTemplates.map((template) => (
                   <button
                     key={template.template_id}
                     type="button"
                     disabled={loading}
                     onClick={() => void handleSelectTemplate(template.template_id)}
                     className={cn(
-                      "px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-all",
+                      "px-4 py-2 rounded-lg text-sm font-semibold border transition-all",
                       "border-border bg-card hover:border-primary hover:bg-primary/5",
                       selectedTemplateId === template.template_id &&
-                        "border-primary bg-primary/10 text-primary",
+                        "border-primary bg-primary/10 text-primary shadow-sm",
                     )}
                   >
                     {template.name}
                   </button>
                 ))}
               </div>
+
+              {moreTemplates.length > 0 && (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setShowMoreTemplates((v) => !v)}
+                    className="mx-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    More templates
+                    {showMoreTemplates ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  {showMoreTemplates && (
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {moreTemplates.map((template) => (
+                        <button
+                          key={template.template_id}
+                          type="button"
+                          disabled={loading}
+                          onClick={() =>
+                            void handleSelectTemplate(template.template_id)
+                          }
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-all",
+                            "border-border bg-card hover:border-primary hover:bg-primary/5",
+                            selectedTemplateId === template.template_id &&
+                              "border-primary bg-primary/10 text-primary",
+                          )}
+                        >
+                          {template.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-center">
                 <Button
                   variant="outline"
@@ -281,29 +349,39 @@ export default function HomePage() {
             </div>
           )}
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+          {selectedTemplateId ? (
+            <div className="space-y-2">
+              <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground leading-relaxed">
+                {task || "Loading template instructions…"}
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                Template instructions are fixed. Customize on the results page
+                via <span className="font-medium text-foreground">Refine</span>.
+                Click the template again to clear and use your own task.
+              </p>
             </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background px-3 text-xs text-muted-foreground">
-                or describe your task
-              </span>
+          ) : (
+            <div className="space-y-2">
+              <Input
+                placeholder="Extract vendor name, amount, due date…"
+                value={task}
+                onChange={(e) => setTask(e.target.value)}
+                disabled={loading}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleRun();
+                }}
+                className="w-full"
+              />
             </div>
-          </div>
+          )}
 
-          <div className="flex gap-2">
-            <Input
-              placeholder="Extract vendor name, amount, due date…"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
+          <div className="flex justify-center">
+            <Button
+              onClick={() => void handleRun()}
               disabled={loading}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleRun();
-              }}
-              className="flex-1"
-            />
-            <Button onClick={() => void handleRun()} disabled={loading}>
+              size="lg"
+              className="min-w-[140px]"
+            >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

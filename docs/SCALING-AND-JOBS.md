@@ -1,6 +1,6 @@
 # Nexora — Scaling, Jobs & Future Ops
 
-**Updated:** 2026-08-11  
+**Updated:** 2026-08-16  
 **Audience:** when you outgrow a single Railway API process + in-process `BackgroundTasks`.
 
 This doc captures decisions from the launch hardening review so we do **not** reopen them casually during ship week. For near-term product tasks see [NEXT-STEPS.md](./NEXT-STEPS.md).
@@ -135,7 +135,9 @@ Do **not** add unbounded `asyncio.gather` over LLM calls for launch.
 | Persist OpenAI spend beyond one API process | Today `openai_cost` day totals are **in-process**; multi-replica needs Redis/DB |
 | Admin `/api/admin/openai-spend` | Snapshot only for the replica that handled calls |
 | Route simple templates to `gpt-4o-mini` | Big $/page win once quality is validated |
-| Upload TTL cleanup sweep | Storage cost / privacy (also in NEXT-STEPS deferred) |
+| Upload TTL cleanup sweep | **Not for launch.** Implement later as **RetentionCleanupService** (separate from OwnerRefineService). Policy: delete upload bytes + `cached_documents` + `result` cells; keep refinement events + prompt blobs + catalog so master refine still works without PDFs. Product copy: [NEXT-STEPS.md](./NEXT-STEPS.md). |
+| Structured logs + `audit_events` | **Shipped in-process.** Stdout includes `rid`/`uid`. `audit_events` is append-only activity (no payloads). Central log drain (Datadog/Axiom) still later. |
+| Per-transaction rules (e.g. flag debits > X in `transactions[]`) | **Deferred.** `transform.rules` compares scalar fields only; bank `large_transaction` rule removed at launch (was broken on array field). **Trigger:** users want approval flags on individual statement lines. **Approach:** extend rules agent or post-process in refine. |
 
 ---
 

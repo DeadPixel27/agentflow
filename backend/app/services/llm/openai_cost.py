@@ -177,10 +177,15 @@ def record_openai_usage(estimate: OpenAIUsageEstimate) -> None:
 
 async def log_openai_usage_event(estimate: OpenAIUsageEstimate) -> None:
     """Best-effort analytics row for later spend review."""
+    from app.logging_context import get_run_id, get_user_id
     from app.services.analytics.events import log_event
 
+    uid = get_user_id()
+    rid = get_run_id()
     await log_event(
         "openai_usage",
+        user_id=None if uid in ("", "-") else uid,
+        run_id=None if rid in ("", "-") else rid,
         metadata={
             "model": estimate.model,
             "prompt_tokens": estimate.prompt_tokens,

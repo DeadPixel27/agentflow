@@ -96,6 +96,8 @@ class Settings(BaseSettings):
 
     # Deployment environment — set APP_ENV=production on Railway
     app_env: str = "development"
+    # Log prompt tails / extracted field values (local debug only)
+    log_payloads: bool = False
 
     # Supabase — persistence (optional; falls back to in-memory)
     supabase_url: str = ""

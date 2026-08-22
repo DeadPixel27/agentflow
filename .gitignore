@@ -4,7 +4,14 @@ __pycache__/
 .venv/
 venv/
 .env
+backend/.env
 .pytest_cache/
+
+# HuggingFace / model caches (local downloads, ~GB)
+backend/.hf_cache/
+
+# Local-only test docs (never commit customer/real files)
+backend/tests/fixtures/documents/private/
 
 # Uploaded files (local dev only)
 backend/uploads/
@@ -38,3 +45,5 @@ frontend-launch-prompt/
 
 # Google service account keys (never commit)
 backend/secrets/
+*.pem
+*credentials*.json

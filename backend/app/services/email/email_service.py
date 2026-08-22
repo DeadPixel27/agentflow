@@ -108,7 +108,7 @@ async def send_results_email(request: EmailRequest) -> EmailResult:
     """
 
     try:
-        logger.info("Sending results email to %s", request.to_email)
+        logger.info("Sending results email")
         response = resend.Emails.send(
             {
                 "from": settings.resend_from_email,
